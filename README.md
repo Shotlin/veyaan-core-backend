@@ -1,6 +1,9 @@
 # VEYAAN Core Backend
 
-Core backend infrastructure for VEYAAN Project 1 - secure device command pipeline.
+Core backend infrastructure for VEYAAN Project 1 — secure device command pipeline.
+
+> **Status**: Active Development — spec-compliant implementation in progress.  
+> See [`docs/reports/baseline_report.md`](docs/reports/baseline_report.md) for the full audit and compliance checklist.
 
 ## Technology Stack
 
@@ -9,10 +12,11 @@ Core backend infrastructure for VEYAAN Project 1 - secure device command pipelin
 - **Authentication**: Supabase Auth (identity provider)
 - **Event Bus**: NATS JetStream (durable event delivery)
 - **Cache/Locks**: Valkey (Redis-compatible)
-- **Device Communication**: Secure WebSocket
-- **Reverse Proxy**: Caddy (TLS termination)
-- **Deployment**: Docker Compose on Ubuntu ARM64
+- **Device Communication**: WebSocket with Ed25519 challenge-response auth
+- **Reverse Proxy**: Caddy (TLS termination, rate limiting, security headers)
+- **Deployment**: Docker Compose on Ubuntu ARM64 (Oracle Ampere A1)
 - **Target Server**: Oracle Ampere A1 (2 OCPUs, 12 GB RAM)
+
 
 ## Quick Start
 
@@ -165,24 +169,46 @@ Only these test commands are implemented in Project 1:
 
 ## WebSocket Protocol
 
-### Connection
+### Connection (Ed25519 Challenge-Response)
+
+Devices connect via a 3-step handshake — credentials are never passed in the URL:
+
+1. **Connect** — device opens WebSocket with only `device_id` and `protocol_version`:
 ```
-wss://ws.veyaan.local/v1/ws?device_id={id}&credential={proof}&protocol=v1&app_version=1.0.0
+wss://ws.veyaan.local/v1/ws?device_id={id}&protocol=v1
 ```
 
-### Messages
+2. **Challenge** — server immediately sends a `challenge` message:
+```json
+{
+  "type": "challenge",
+  "nonce": "base64-encoded-32-byte-nonce",
+  "expires_in": 30
+}
+```
 
-**Server → Device (Welcome)**
+3. **Auth Response** — device signs the nonce with its Ed25519 private key:
+```json
+{
+  "type": "auth",
+  "device_id": "uuid",
+  "signature": "base64-encoded-signature",
+  "app_version": "1.0.0"
+}
+```
+
+4. **Welcome** — server verifies signature against stored device public key:
 ```json
 {
   "type": "welcome",
   "connection_id": "uuid",
-  "server_time": "2024-01-01T00:00:00Z",
+  "server_time": "2026-01-01T00:00:00Z",
   "heartbeat_interval": 30,
   "protocol_version": "v1",
   "emergency_stop_active": false
 }
 ```
+
 
 **Device → Server (Heartbeat)**
 ```json

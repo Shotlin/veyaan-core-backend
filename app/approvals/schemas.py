@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Generic, Optional, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ApprovalStatus(str, Enum):
@@ -58,8 +58,7 @@ class ApprovalResponse(BaseModel):
     decision_note: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 T = TypeVar('T')
