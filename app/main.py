@@ -18,6 +18,7 @@ from app.devices.routes import router as devices_router
 from app.emergency_stop.routes import router as emergency_stop_router
 from app.events.nats_client import nats_client
 from app.health.routes import router as health_router
+from app.notifications.routes import router as notifications_router
 from app.observability.logging import logger
 from app.security.rate_limiter import RateLimitMiddleware
 from app.users.routes import router as users_router
@@ -77,6 +78,7 @@ app.include_router(commands_router, prefix="/v1")
 app.include_router(emergency_stop_router, prefix="/v1")
 app.include_router(approvals_router, prefix="/v1")
 app.include_router(audit_router, prefix="/v1")
+app.include_router(notifications_router)
 
 
 @app.get("/")

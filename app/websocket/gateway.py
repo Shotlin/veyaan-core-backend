@@ -460,6 +460,16 @@ async def _command_belongs_to_device(command_id: UUID, device_id: UUID) -> bool:
         return False
 
 
+def _validate_protocol_version(version: str | None) -> bool:
+    """
+    Check if the requested protocol version is in the server's supported list.
+    Returns True if valid, False if unsupported or empty.
+    """
+    if not version:
+        return False
+    return version in settings.WS_SUPPORTED_PROTOCOLS
+
+
 @app.get("/health/live")
 async def liveness():
     return {"status": "alive"}
