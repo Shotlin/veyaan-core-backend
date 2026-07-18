@@ -41,6 +41,42 @@ class OutboxPublisher:
             published = 0
             for event in events:
                 try:
+                    # Enforce Emergency Stop check before publishing a command ready event (Enforcement Point 3)
+                    if event.aggregate_type == "command" and "queued" in event.event_type:
+                        from sqlalchemy import select
+
+                        from app.commands.models import Command, CommandState
+                        from app.commands.state_machine import transition_command
+                        from app.devices.models import Device
+                        from app.emergency_stop.service import EmergencyStopService
+
+                        cmd_id = event.aggregate_id
+                        cmd_result = await session.execute(
+                            select(Command).where(Command.id == cmd_id)
+                        )
+                        command = cmd_result.scalar_one_or_none()
+                        if command:
+                            dev_result = await session.execute(
+                                select(Device).where(Device.id == command.device_id)
+                            )
+                            device = dev_result.scalar_one_or_none()
+                            if device:
+                                estop_service = EmergencyStopService()
+                                if await estop_service.is_active(device.owner_id):
+                                    try:
+                                        await transition_command(
+                                            session,
+                                            command.id,
+                                            CommandState.BLOCKED_BY_EMERGENCY_STOP,
+                                            "outbox_enforcement",
+                                        )
+                                    except Exception:
+                                        pass
+                                    await repo.mark_failed(
+                                        event.id, "Blocked by active emergency stop"
+                                    )
+                                    continue
+
                     await nats_client.publish_js(
                         event.subject,
                         event.payload,
@@ -59,7 +95,7 @@ class OutboxPublisher:
                     else:
                         await repo.increment_attempt(event.id, str(e))
 
-            if published > 0:
+            if published > 0 or any(event.aggregate_type == "command" for event in events):
                 await session.commit()
 
             return published

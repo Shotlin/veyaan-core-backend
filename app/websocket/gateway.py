@@ -101,22 +101,18 @@ class ConnectionManager:
         self, device_id: UUID, owner_id: UUID, message: CommandRequestMessage
     ) -> bool:
         """Send command to device — blocks if emergency stop is active for this owner."""
-        # GAP-P0-4: Check emergency stop before every send
-        estop_active = await valkey_client.get(f"emergency_stop:{owner_id}")
-        if estop_active:
-            active = (
-                estop_active.get("active", False)
-                if isinstance(estop_active, dict)
-                else bool(estop_active)
+        # GAP-P0-4: Check emergency stop before every send (database is authoritative via service)
+        from app.emergency_stop.service import EmergencyStopService
+
+        estop_service = EmergencyStopService()
+        if await estop_service.is_active(owner_id):
+            logger.warning(
+                "command_blocked_by_emergency_stop",
+                device_id=str(device_id),
+                owner_id=str(owner_id),
+                command_id=str(message.command_id),
             )
-            if active:
-                logger.warning(
-                    "command_blocked_by_emergency_stop",
-                    device_id=str(device_id),
-                    owner_id=str(owner_id),
-                    command_id=str(message.command_id),
-                )
-                return False
+            return False
 
         conn = self.get(device_id)
         if not conn:
@@ -168,6 +164,12 @@ async def startup():
     await init_db()
     await valkey_client.connect()
     await nats_client.connect()
+
+    # Subscribe WebSocket gateway globally to NATS security event broadcasts
+    if nats_client.nc:
+        await nats_client.nc.subscribe("veyaan.security.>", cb=security_callback)
+        logger.info("Subscribed WebSocket Gateway to veyaan.security.>")
+
     logger.info("Gateway startup complete")
 
 
@@ -552,6 +554,25 @@ async def _command_belongs_to_device(command_id: UUID, device_id: UUID) -> bool:
     except Exception as e:
         logger.error("command_ownership_check_failed", command_id=str(command_id), error=str(e))
         return False
+
+
+async def security_callback(msg):
+    try:
+        subject = msg.subject
+        data = json.loads(msg.data.decode())
+        logger.info("received_security_event", subject=subject, data=data)
+
+        parts = subject.split(".")
+        # veyaan.security.emergency_stop.owner_id
+        # veyaan.security.emergency_resume.owner_id
+        if len(parts) >= 4:
+            action = parts[2]
+            owner_id = UUID(parts[3])
+            active = action == "emergency_stop"
+            reason = data.get("reason", "")
+            await connection_manager.broadcast_emergency_stop(owner_id, active, reason)
+    except Exception as e:
+        logger.exception("security_event_processing_failed", error=str(e))
 
 
 def _validate_protocol_version(version: str | None) -> bool:

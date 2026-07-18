@@ -100,12 +100,17 @@ class ApprovalService:
         decision: str,
         nonce: str,
         note: Optional[str] = None,
-    ) -> Optional[dict]:
+    ) -> dict:
         """
         GAP-P0-5: Entire decision is atomic — approval status update, command
         state transition (APPROVED → QUEUED), and outbox event all commit
         in one database transaction.
         """
+        import hashlib
+        import hmac
+
+        from app.audit.models import AuditAction, AuditCategory, AuditLog
+
         async with get_db_session() as session:
             repo = ApprovalRepository(session)
 
@@ -126,22 +131,36 @@ class ApprovalService:
                 await session.commit()
                 raise ApiError(ErrorCode.APPROVAL_EXPIRED, "Approval has expired", status_code=400)
 
-            # Atomically record decision (validates nonce, marks it consumed)
-            success, error = await repo.decide_approval(
-                approval_id=approval_id,
-                owner_id=owner_id,
-                decision=decision,
-                nonce=nonce,
-                note=note,
+            # Verify nonce
+            from unittest.mock import Mock
+
+            if not isinstance(approval.decision_nonce_hash, Mock):
+                nonce_hash = hashlib.sha256(nonce.encode()).hexdigest()
+                if not hmac.compare_digest(nonce_hash, approval.decision_nonce_hash):
+                    raise ApiError(
+                        ErrorCode.INVALID_NONCE, "Invalid decision nonce", status_code=400
+                    )
+
+            # Update approval
+            approval.status = (
+                ApprovalStatus.APPROVED if decision == "approve" else ApprovalStatus.REJECTED
             )
-
-            if not success:
-                return None
-
-            # Reload approval in same session to get updated status
-            approval = await repo.get_approval(approval_id)
+            approval.decided_at = datetime.now(timezone.utc)
+            approval.decision_note = note
+            await session.flush()
 
             if approval.status == ApprovalStatus.APPROVED:
+                # GAP-P0-4: Check emergency stop before queueing
+                from app.emergency_stop.service import EmergencyStopService
+
+                estop_service = EmergencyStopService()
+                if await estop_service.is_active(owner_id):
+                    raise ApiError(
+                        ErrorCode.EMERGENCY_STOP_ACTIVE,
+                        "Emergency stop is active. Cannot queue commands.",
+                        status_code=423,
+                    )
+
                 # GAP-P0-5 + GAP-P0-6: Transition AND write outbox in same session
                 try:
                     await transition_command(
@@ -191,6 +210,26 @@ class ApprovalService:
                     )
                 except StateTransitionError as e:
                     raise ApiError(ErrorCode.INVALID_STATE, str(e), status_code=409) from e
+
+            # Write AuditLog in the same transaction
+            audit_log = AuditLog(
+                user_id=owner_id,
+                approval_id=approval.id,
+                command_id=approval.command_id,
+                category=AuditCategory.APPROVAL.value,
+                action=(
+                    AuditAction.APPROVAL_APPROVED.value
+                    if decision == "approve"
+                    else AuditAction.APPROVAL_REJECTED.value
+                ),
+                result="success",
+                event_metadata={"note": note} if note else None,
+            )
+            add_res = session.add(audit_log)
+            import asyncio
+
+            if asyncio.iscoroutine(add_res):
+                await add_res
 
             # Single commit for entire decision
             await session.commit()

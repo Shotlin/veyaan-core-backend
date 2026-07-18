@@ -106,7 +106,7 @@ class TestEmergencyStopE2E:
             trace_id=uuid4(),
         )
 
-        with patch("app.websocket.gateway.valkey_client") as mock_valkey:
+        with patch("app.emergency_stop.service.valkey_client") as mock_valkey:
             # Emergency stop is active in Valkey
             mock_valkey.get = AsyncMock(return_value={"active": True})
 
@@ -150,7 +150,7 @@ class TestEmergencyStopE2E:
             trace_id=uuid4(),
         )
 
-        with patch("app.websocket.gateway.valkey_client") as mock_valkey:
+        with patch("app.emergency_stop.service.valkey_client") as mock_valkey:
             # Emergency stop is NOT active (released)
             mock_valkey.get = AsyncMock(return_value={"active": False})
 

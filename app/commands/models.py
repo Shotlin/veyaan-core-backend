@@ -144,3 +144,7 @@ class CommandStateEvent(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     command = relationship("Command", back_populates="state_events")
+
+
+# Register Approval model for SQLAlchemy mapper resolution
+from app.approvals.models import Approval  # noqa: F401, E402

@@ -74,6 +74,33 @@ class EmergencyStopService:
 
             await session.flush()
 
+            # Transition all existing QUEUED or APPROVED commands for this owner to blocked_by_emergency_stop
+            from app.commands.models import Command, CommandState
+            from app.commands.state_machine import transition_command
+            from app.devices.models import Device
+
+            dev_ids_query = select(Device.id).where(Device.owner_id == owner_id)
+            dev_ids_result = await session.execute(dev_ids_query)
+            dev_ids = dev_ids_result.scalars().all()
+
+            if dev_ids:
+                cmd_query = select(Command.id).where(
+                    Command.device_id.in_(dev_ids),
+                    Command.state.in_([CommandState.QUEUED.value, CommandState.APPROVED.value]),
+                )
+                cmd_result = await session.execute(cmd_query)
+                cmd_ids = cmd_result.scalars().all()
+                for cmd_id in cmd_ids:
+                    try:
+                        await transition_command(
+                            session,
+                            cmd_id,
+                            CommandState.BLOCKED_BY_EMERGENCY_STOP,
+                            "emergency_stop_activation",
+                        )
+                    except Exception:
+                        pass
+
             audit = AuditService()
             await audit.create_audit_log(
                 category=AuditCategory.EMERGENCY_STOP,

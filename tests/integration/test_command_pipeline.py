@@ -212,7 +212,11 @@ class TestApprovalAtomicity:
             patch("app.approvals.service.ApprovalRepository") as mock_repo_class,
             patch("app.approvals.service.OutboxRepository") as mock_outbox_class,
             patch("app.approvals.service.transition_command", new=AsyncMock()),
+            patch("app.emergency_stop.service.EmergencyStopService") as mock_estop_class,
         ):
+            mock_estop = AsyncMock()
+            mock_estop.is_active = AsyncMock(return_value=False)
+            mock_estop_class.return_value = mock_estop
             # Approval setup
             mock_approval = MagicMock()
             mock_approval.id = approval_id

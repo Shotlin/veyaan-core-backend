@@ -49,6 +49,8 @@ class CreateCommandResponse(BaseModel):
     task_id: UUID
     state: CommandState
     requires_approval: bool
+    approval_id: Optional[UUID] = None
+    decision_nonce: Optional[str] = None
 
 
 class CommandResponse(BaseModel):

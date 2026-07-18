@@ -100,9 +100,25 @@ class CommandService:
             )
             session.add(event)
 
+            approval_id = None
+            decision_nonce = None
+
             if requires_approval:
                 await transition_command(session, command.id, CommandState.VALIDATED, "api")
                 await transition_command(session, command.id, CommandState.AWAITING_APPROVAL, "api")
+
+                from app.approvals.repository import ApprovalRepository
+
+                app_repo = ApprovalRepository(session)
+                approval, decision_nonce = await app_repo.create_approval(
+                    command_id=command.id,
+                    owner_id=owner_id,
+                    risk_level=command.risk_level,
+                    action_title=f"Approve {command.command_type}",
+                    action_description=f"Approve command {command.command_type} for device {command.device_id}",
+                    expires_in_minutes=30,
+                )
+                approval_id = approval.id
             else:
                 await transition_command(session, command.id, CommandState.VALIDATED, "api")
                 await transition_command(session, command.id, CommandState.QUEUED, "api")
@@ -131,6 +147,8 @@ class CommandService:
                 task_id=task.id,
                 state=command.state,
                 requires_approval=requires_approval,
+                approval_id=approval_id,
+                decision_nonce=decision_nonce,
             )
 
     async def get_command(self, command_id: UUID) -> Optional[Command]:

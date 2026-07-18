@@ -53,7 +53,11 @@ class TestApprovalDecision:
             patch("app.approvals.service.ApprovalRepository") as mock_repo_class,
             patch("app.approvals.service.OutboxRepository"),
             patch("app.approvals.service.transition_command") as mock_transition,
+            patch("app.emergency_stop.service.EmergencyStopService") as mock_estop_class,
         ):
+            mock_estop = AsyncMock()
+            mock_estop.is_active = AsyncMock(return_value=False)
+            mock_estop_class.return_value = mock_estop
             call_count = [0]
 
             async def get_approval_side(aid):
