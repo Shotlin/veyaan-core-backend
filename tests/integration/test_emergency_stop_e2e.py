@@ -4,10 +4,11 @@ Emergency stop integration tests.
 Verifies the full activate → block → release → allow cycle.
 """
 
-import pytest
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-from datetime import datetime, timezone
+
+import pytest
 
 
 class TestEmergencyStopE2E:
@@ -17,8 +18,8 @@ class TestEmergencyStopE2E:
         """
         When emergency stop is active, create_command must raise 423 Locked.
         """
-        from app.commands.service import CommandService
         from app.api.errors import ApiError
+        from app.commands.service import CommandService
 
         owner_id = uuid4()
         device_id = uuid4()
@@ -72,18 +73,19 @@ class TestEmergencyStopE2E:
         """
         When emergency stop is active, send_command returns False (delivery blocked).
         """
+        from datetime import datetime
+        from uuid import uuid4
+
         from app.websocket.gateway import ConnectionManager
         from app.websocket.protocol.messages import CommandRequestMessage
-        from uuid import uuid4
-        from datetime import datetime, timezone
 
         manager = ConnectionManager()
         owner_id = uuid4()
         device_id = uuid4()
 
         # Register a fake connection
+
         from app.websocket.gateway import DeviceConnection
-        import asyncio
 
         class FakeWebSocket:
             async def send_json(self, data): pass
@@ -114,9 +116,10 @@ class TestEmergencyStopE2E:
         """
         After emergency stop release, send_command returns True.
         """
+        from datetime import datetime
+
         from app.websocket.gateway import ConnectionManager, DeviceConnection
         from app.websocket.protocol.messages import CommandRequestMessage
-        from datetime import datetime, timezone
 
         manager = ConnectionManager()
         owner_id = uuid4()
@@ -157,9 +160,10 @@ class TestEmergencyStopE2E:
         The is_active state returned by EmergencyStopService must be reflected
         in the WelcomeMessage sent to the connecting device.
         """
-        from app.websocket.protocol.messages import WelcomeMessage
+        from datetime import timezone
         from uuid import uuid4
-        from datetime import datetime, timezone
+
+        from app.websocket.protocol.messages import WelcomeMessage
 
         # Simulate building a welcome message with active=True
         welcome = WelcomeMessage(

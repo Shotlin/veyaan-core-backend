@@ -1,9 +1,10 @@
 """Unit tests for the emergency stop service."""
 
-import pytest
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-from datetime import datetime, timezone
+
+import pytest
 
 
 class TestEmergencyStopService:
@@ -75,8 +76,11 @@ class TestEmergencyStopService:
 
         with patch("app.emergency_stop.service.valkey_client") as mock_valkey, \
              patch("app.emergency_stop.service.get_db_session") as mock_db, \
-             patch("app.emergency_stop.service.AuditService"), \
+             patch("app.emergency_stop.service.AuditService") as mock_audit_class, \
              patch("app.emergency_stop.service.nats_client") as mock_nats:
+
+            mock_audit = AsyncMock()
+            mock_audit_class.return_value = mock_audit
 
             mock_valkey.set = AsyncMock()
             mock_nats.publish_js = AsyncMock()
@@ -94,7 +98,7 @@ class TestEmergencyStopService:
             mock_db.return_value = mock_session
 
             service = EmergencyStopService()
-            result = await service.activate(owner_id, "test reason", actor_id)
+            await service.activate(owner_id, "test reason", actor_id)
 
         mock_valkey.set.assert_called_once()  # cached after activation
         mock_nats.publish_js.assert_called_once()  # broadcast to devices
@@ -111,8 +115,11 @@ class TestEmergencyStopService:
 
         with patch("app.emergency_stop.service.valkey_client") as mock_valkey, \
              patch("app.emergency_stop.service.get_db_session") as mock_db, \
-             patch("app.emergency_stop.service.AuditService"), \
+             patch("app.emergency_stop.service.AuditService") as mock_audit_class, \
              patch("app.emergency_stop.service.nats_client") as mock_nats:
+
+            mock_audit = AsyncMock()
+            mock_audit_class.return_value = mock_audit
 
             mock_valkey.delete = AsyncMock()
             mock_nats.publish_js = AsyncMock()

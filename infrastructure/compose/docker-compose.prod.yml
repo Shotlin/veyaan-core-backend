@@ -30,8 +30,6 @@ services:
     env_file:
       - ../../.env.production
     depends_on:
-      neon:
-        condition: service_healthy
       nats:
         condition: service_healthy
       valkey:
@@ -92,8 +90,6 @@ services:
     env_file:
       - ../../.env.production
     depends_on:
-      neon:
-        condition: service_healthy
       nats:
         condition: service_healthy
       valkey:
@@ -119,8 +115,6 @@ services:
     env_file:
       - ../../.env.production
     depends_on:
-      neon:
-        condition: service_healthy
       nats:
         condition: service_healthy
       valkey:
@@ -146,8 +140,6 @@ services:
     env_file:
       - ../../.env.production
     depends_on:
-      neon:
-        condition: service_healthy
       nats:
         condition: service_healthy
       valkey:

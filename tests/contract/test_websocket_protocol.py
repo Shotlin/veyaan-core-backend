@@ -5,9 +5,10 @@ Verifies that unsupported protocol versions are rejected with a clear
 error message, and that supported versions are accepted.
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 from uuid import uuid4
+
+import pytest
 
 
 class TestWebSocketProtocolContract:
@@ -65,13 +66,13 @@ class TestOpenApiSchemaContract:
         required_paths = [
             "/health/live",
             "/health/ready",
-            "/api/v1/devices/pairing/start",
-            "/api/v1/devices/pairing/confirm",
-            "/api/v1/commands",
-            "/api/v1/approvals",
-            "/api/v1/emergency-stop/activate",
-            "/api/v1/emergency-stop/release",
-            "/api/v1/emergency-stop/status",
+            "/v1/devices/pair",
+            "/v1/devices/pair/{pairing_id}/confirm",
+            "/v1/commands",
+            "/v1/approvals",
+            "/v1/emergency-stop/activate",
+            "/v1/emergency-stop/release",
+            "/v1/emergency-stop/status",
         ]
 
         for path in required_paths:
@@ -96,8 +97,9 @@ class TestOpenApiSchemaContract:
     @pytest.mark.asyncio
     async def test_command_create_schema_requires_idempotency_key(self):
         """CreateCommandRequest schema must require idempotency_key."""
-        from app.commands.schemas import CreateCommandRequest
         import pydantic
+
+        from app.commands.schemas import CreateCommandRequest
 
         # Missing idempotency_key must fail validation
         with pytest.raises((ValueError, pydantic.ValidationError)):
@@ -111,8 +113,9 @@ class TestOpenApiSchemaContract:
     @pytest.mark.asyncio
     async def test_approval_decision_enum_validated(self):
         """ApprovalDecisionRequest must only accept 'approve' or 'reject'."""
-        from app.approvals.schemas import ApprovalDecisionRequest
         import pydantic
+
+        from app.approvals.schemas import ApprovalDecisionRequest
 
         # Valid decisions
         req = ApprovalDecisionRequest(decision="approve", nonce="abc123")

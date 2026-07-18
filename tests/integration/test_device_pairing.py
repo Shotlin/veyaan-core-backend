@@ -5,12 +5,13 @@ Tests the full path: start pairing → confirm → device registered.
 Also tests revoked device rejection.
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
-from datetime import datetime, timezone, timedelta
 import hashlib
 import secrets
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
+
+import pytest
 
 
 class TestDevicePairingFlow:
@@ -18,8 +19,8 @@ class TestDevicePairingFlow:
     @pytest.mark.asyncio
     async def test_start_pairing_returns_code_and_expiry(self):
         """start_pairing must return a pairing_request_id, code, and expiry."""
-        from app.devices.service import DeviceService
         from app.devices.schemas import DevicePairingRequest
+        from app.devices.service import DeviceService
 
         request = DevicePairingRequest(
             display_name="Test Device",
@@ -54,9 +55,9 @@ class TestDevicePairingFlow:
     @pytest.mark.asyncio
     async def test_confirm_pairing_with_correct_code_creates_device(self):
         """Correct pairing code must create a Device + DeviceCredential."""
-        from app.devices.service import DeviceService
+
         from app.devices.models import PairingRequest, PairingStatus
-        import hmac
+        from app.devices.service import DeviceService
 
         pairing_id = uuid4()
         owner_id = uuid4()
@@ -117,9 +118,9 @@ class TestDevicePairingFlow:
     @pytest.mark.asyncio
     async def test_confirm_pairing_with_wrong_code_raises_error(self):
         """Wrong pairing code must raise PAIRING_INVALID."""
-        from app.devices.service import DeviceService
-        from app.devices.models import PairingRequest, PairingStatus
         from app.api.errors import ApiError
+        from app.devices.models import PairingRequest, PairingStatus
+        from app.devices.service import DeviceService
 
         pairing_id = uuid4()
         owner_id = uuid4()
@@ -152,9 +153,9 @@ class TestDevicePairingFlow:
     @pytest.mark.asyncio
     async def test_confirm_expired_pairing_raises_error(self):
         """Expired pairing must raise PAIRING_EXPIRED."""
-        from app.devices.service import DeviceService
-        from app.devices.models import PairingRequest, PairingStatus
         from app.api.errors import ApiError
+        from app.devices.models import PairingRequest, PairingStatus
+        from app.devices.service import DeviceService
 
         pairing_id = uuid4()
         owner_id = uuid4()
@@ -210,12 +211,12 @@ class TestDevicePairingFlow:
             mock_session.__aexit__ = AsyncMock(return_value=False)
             mock_db.return_value = mock_session
 
-            with patch("app.devices.service.nats_client") as mock_nats:
+            with patch("app.events.nats_client.nats_client") as mock_nats:
                 async def capture_publish(subject, data):
                     nats_published.append({"subject": subject, "data": data})
                 mock_nats.publish = AsyncMock(side_effect=capture_publish)
 
-                with patch("app.devices.service.subjects") as mock_subjects:
+                with patch("app.events.subjects") as mock_subjects:
                     mock_subjects.device_lifecycle = MagicMock(return_value=f"device.lifecycle.{device_id}")
 
                     service = DeviceService()

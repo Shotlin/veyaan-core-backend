@@ -4,12 +4,10 @@ Tests JWT validation, user context resolution, suspended accounts,
 and missing/expired/invalid token handling.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
-from fastapi import HTTPException
-
+import pytest
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -40,8 +38,8 @@ class TestGetCurrentToken:
 
     @pytest.mark.asyncio
     async def test_missing_credentials_raises_401(self):
-        from app.auth.dependencies import get_current_token
         from app.api.errors import ApiError
+        from app.auth.dependencies import get_current_token
         with pytest.raises(ApiError) as exc_info:
             await get_current_token(credentials=None)
         assert exc_info.value.status_code == 401
@@ -114,8 +112,8 @@ class TestGetCurrentUserContext:
 
     @pytest.mark.asyncio
     async def test_suspended_user_raises_403(self):
-        from app.auth.dependencies import get_current_user_context
         from app.api.errors import ApiError
+        from app.auth.dependencies import get_current_user_context
 
         claims = _make_claims()
         suspended_user = _make_user("suspended")
@@ -136,8 +134,8 @@ class TestGetCurrentUserContext:
 
     @pytest.mark.asyncio
     async def test_invalid_token_propagates_error(self):
-        from app.auth.dependencies import get_current_user_context
         from app.api.errors import ApiError
+        from app.auth.dependencies import get_current_user_context
 
         with patch("app.auth.dependencies.supabase_auth") as mock_auth:
             mock_auth.verify_token = AsyncMock(

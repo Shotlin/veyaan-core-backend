@@ -9,7 +9,7 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 revision = "009_add_notifications"
-down_revision = "008_add_jsonb_and_outbox"
+down_revision = "008"
 branch_labels = None
 depends_on = None
 

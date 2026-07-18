@@ -2,8 +2,7 @@
 Unit tests for the FakeClock and clock abstraction.
 """
 
-import pytest
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.utils.clock import FakeClock, SystemClock
 

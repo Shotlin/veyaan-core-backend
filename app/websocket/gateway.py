@@ -2,11 +2,11 @@
 
 import asyncio
 import json
-import logging
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 
+import structlog
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
@@ -29,7 +29,7 @@ from app.websocket.protocol.messages import (
 )
 from app.websocket.protocol.validator import ProtocolError, ProtocolValidator
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class DeviceConnection:
@@ -444,8 +444,9 @@ async def handle_device_message(device_id: UUID, owner_id: UUID, data: bytes) ->
 async def _command_belongs_to_device(command_id: UUID, device_id: UUID) -> bool:
     """Verify that a command_id was assigned to this specific device (ownership check)."""
     try:
-        from app.commands.models import Command
         from sqlalchemy import select
+
+        from app.commands.models import Command
 
         async with get_db_session() as session:
             result = await session.execute(

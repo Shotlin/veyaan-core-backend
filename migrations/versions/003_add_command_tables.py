@@ -72,19 +72,19 @@ def upgrade() -> None:
 
     # Add CHECK constraints for enum-like fields
     op.execute("""
-        ALTER TABLE commands ADD CONSTRAINT chk_risk_level 
+        ALTER TABLE commands ADD CONSTRAINT chk_risk_level
         CHECK (risk_level IN ('low', 'medium', 'high', 'prohibited'))
     """)
     op.execute("""
-        ALTER TABLE commands ADD CONSTRAINT chk_command_state 
+        ALTER TABLE commands ADD CONSTRAINT chk_command_state
         CHECK (state IN ('received', 'validated', 'awaiting_approval', 'approved', 'rejected', 'queued', 'delivered', 'acknowledged', 'running', 'succeeded', 'failed', 'timed_out', 'cancelled', 'expired', 'blocked_by_emergency_stop'))
     """)
     op.execute("""
-        ALTER TABLE tasks ADD CONSTRAINT chk_task_state 
+        ALTER TABLE tasks ADD CONSTRAINT chk_task_state
         CHECK (state IN ('pending', 'queued', 'delivered', 'acknowledged', 'running', 'succeeded', 'failed', 'timed_out', 'cancelled'))
     """)
     op.execute("""
-        ALTER TABLE command_state_events ADD CONSTRAINT chk_event_state 
+        ALTER TABLE command_state_events ADD CONSTRAINT chk_event_state
         CHECK (new_state IN ('received', 'validated', 'awaiting_approval', 'approved', 'rejected', 'queued', 'delivered', 'acknowledged', 'running', 'succeeded', 'failed', 'timed_out', 'cancelled', 'expired', 'blocked_by_emergency_stop'))
     """)
 

@@ -68,15 +68,15 @@ def upgrade() -> None:
 
     # Add CHECK constraints for enum-like fields
     op.execute("""
-        ALTER TABLE devices ADD CONSTRAINT chk_device_type 
+        ALTER TABLE devices ADD CONSTRAINT chk_device_type
         CHECK (device_type IN ('macbook', 'iphone', 'ipad'))
     """)
     op.execute("""
-        ALTER TABLE devices ADD CONSTRAINT chk_trust_status 
+        ALTER TABLE devices ADD CONSTRAINT chk_trust_status
         CHECK (trust_status IN ('trusted', 'revoked', 'pending'))
     """)
     op.execute("""
-        ALTER TABLE pairing_requests ADD CONSTRAINT chk_pairing_status 
+        ALTER TABLE pairing_requests ADD CONSTRAINT chk_pairing_status
         CHECK (status IN ('pending', 'confirmed', 'expired', 'rejected'))
     """)
 

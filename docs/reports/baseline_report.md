@@ -1,180 +1,352 @@
-# VEYAAN Core Backend — Baseline Assessment Report
+# VEYAAN Core Backend — Baseline Assessment Report (Phase 0)
 
-**Date**: 2026-07-18  
-**Spec Reference**: `veyaan_project1_backend_spec`, `veyaan_backend_10of10_spec`  
-**Scope**: Project 1 — Secure Control Plane (excludes AI inference, Hermes, voice/gesture)
+This report details the baseline state of the `veyaan-core-backend` repository on the current branch before any modifications.
 
 ---
 
-## Executive Summary
+## 1. Git Environment & Baseline Metadata
 
-The VEYAAN Core Backend has been systematically audited against the `19_FILE_BY_FILE_CHANGE_MATRIX.md` and `20_DEFINITION_OF_DONE_AND_RELEASE_CHECKLIST.md` specifications. This report documents the baseline state found at the start of the audit, the gap remediation performed, and the current compliance status.
+- **Current Commit**: `1db9742f9e4bd33b934b07fb8d3568873133f8fc69980419df`
+- **Branch**: `main`
+- **Repository Remote**: `https://github.com/Shotlin/veyaan-core-backend.git`
 
 ---
 
-## Phase 0 — Baseline State at Audit Start
+## 2. Repository Tree
 
-### Architecture Status (Pre-Remediation)
-
-| Component | Baseline State | Target State |
-|---|---|---|
-| WebSocket auth | URL query-param `device_token` (insecure) | Ed25519 challenge-response |
-| Emergency stop in WelcomeMessage | Hardcoded `False` | Live Valkey/DB lookup |
-| NATS ACK ordering | Ack before command sent | Ack after durable send |
-| Approval decision atomicity | Two separate DB sessions | Single atomic session |
-| Outbox on approval | Not written on approve | Written in same transaction |
-| Health readiness code | Always 200 | 503 on dependency failure |
-| Device revoke WS close | No signal sent | NATS lifecycle event |
-| WebSocket command ownership | Not verified | Verified per message |
-| Idempotency conflict detection | Silent replay | 409 on type mismatch |
-| MyPy in CI | Suppressed with `\|\| true` | Hard failure |
-| SAST in CI | Bandit output only (no fail) | Fails on HIGH findings |
-| pip-audit | Suppressed with `\|\| true` | Hard failure |
-| Coverage threshold | 30% | 70% |
-| Notification service | Not implemented | Model + service + migration |
-| R2 storage adapter | Not implemented | Upload/presign/delete |
-| Scheduler tasks | 3 of 5 | All 5 including stale presence |
-| Rate limiter proxy trust | Trusts any X-Forwarded-For | Only from TRUSTED_PROXY_IPS |
-| Pydantic schema style | Legacy `class Config` | `model_config = ConfigDict(...)` |
-| Domain error hierarchy | Flat ErrorCode enum only | Typed exception subclasses |
-| Clock abstraction | `datetime.now()` inline | Injectable `Clock` protocol |
-| Test coverage | ~12 test functions | 60+ test functions across unit/integration/contract |
-
-### Files Present (Baseline)
+Below is the file structure of the workspace (excluding `.git`, `.venv`, and `__pycache__` directories):
 
 ```
-app/
-├── api/           errors.py, dependencies.py
-├── approvals/     models.py, repository.py, routes.py, service.py
-├── audit/         models.py, repository.py, routes.py, service.py
-├── auth/          dependencies.py, models.py, routes.py
-├── cache/         __init__.py
-├── commands/      models.py, registry.py, repository.py, routes.py, service.py
-├── database/      connection.py, session.py
-├── devices/       models.py, repository.py, routes.py, service.py
-├── emergency_stop/ models.py, repository.py, routes.py, service.py
-├── events/        nats_client.py, outbox.py, subjects.py
-├── health/        checks.py, routes.py
-├── observability/ logging.py, metrics.py
-├── security/      rate_limiter.py
-├── users/         repository.py, routes.py, service.py
-├── websocket/     gateway.py, protocol/messages.py
-├── workers/       command_consumer.py, outbox_publisher.py, scheduler.py
-└── main.py, config.py
+.
+├── Dockerfile
+├── Dockerfile.gateway
+├── Dockerfile.worker
+├── QA_TEST_PLAN.md
+├── README.md
+├── REMEDIATION_SUMMARY.md
+├── alembic.ini
+├── app
+│   ├── __init__.py
+│   ├── api
+│   │   ├── dependencies.py
+│   │   ├── domain_errors.py
+│   │   ├── errors.py
+│   │   ├── middleware
+│   │   │   ├── __init__.py
+│   │   │   ├── error_handling.py
+│   │   │   ├── request_id.py
+│   │   │   └── tracing.py
+│   │   └── responses.py
+│   ├── approvals
+│   │   ├── __init__.py
+│   │   ├── models.py
+│   │   ├── repository.py
+│   │   ├── routes.py
+│   │   ├── schemas.py
+│   │   └── service.py
+│   ├── audit
+│   │   ├── __init__.py
+│   │   ├── models.py
+│   │   ├── repository.py
+│   │   ├── routes.py
+│   │   ├── schemas.py
+│   │   └── service.py
+│   ├── auth
+│   │   ├── __init__.py
+│   │   ├── dependencies.py
+│   │   ├── models.py
+│   │   ├── routes.py
+│   │   ├── supabase.py
+│   │   └── user_context.py
+│   ├── cache
+│   │   └── __init__.py
+│   ├── commands
+│   │   ├── __init__.py
+│   │   ├── models.py
+│   │   ├── registry.py
+│   │   ├── repository.py
+│   │   ├── routes.py
+│   │   ├── schemas.py
+│   │   ├── service.py
+│   │   └── state_machine.py
+│   ├── config.py
+│   ├── database
+│   │   ├── __init__.py
+│   │   ├── connection.py
+│   │   ├── models.py
+│   │   └── session.py
+│   ├── devices
+│   │   ├── __init__.py
+│   │   ├── models.py
+│   │   ├── repository.py
+│   │   ├── routes.py
+│   │   ├── schemas.py
+│   │   └── service.py
+│   ├── emergency_stop
+│   │   ├── __init__.py
+│   │   ├── models.py
+│   │   ├── repository.py
+│   │   ├── routes.py
+│   │   ├── schemas.py
+│   │   └── service.py
+│   ├── events
+│   │   ├── __init__.py
+│   │   ├── nats_client.py
+│   │   ├── outbox.py
+│   │   ├── outbox_models.py
+│   │   └── subjects.py
+│   ├── health
+│   │   ├── __init__.py
+│   │   ├── checks.py
+│   │   └── routes.py
+│   ├── main.py
+│   ├── notifications
+│   │   ├── __init__.py
+│   │   ├── models.py
+│   │   ├── routes.py
+│   │   ├── schemas.py
+│   │   └── service.py
+│   ├── observability
+│   │   ├── __init__.py
+│   │   ├── logging.py
+│   │   └── metrics.py
+│   ├── protocols
+│   │   ├── __init__.py
+│   │   └── repositories.py
+│   ├── security
+│   │   ├── __init__.py
+│   │   └── rate_limiter.py
+│   ├── storage
+│   │   ├── __init__.py
+│   │   └── r2_client.py
+│   ├── users
+│   │   ├── __init__.py
+│   │   ├── models.py
+│   │   ├── repository.py
+│   │   ├── routes.py
+│   │   └── service.py
+│   └── utils
+│       ├── __init__.py
+│       └── clock.py
+├── docker-compose.yml
+├── docs
+│   ├── reports
+│   │   └── baseline_report.md
+│   └── runbooks
+│       ├── backup_restore.md
+│       ├── gateway_restart.md
+│       └── nats_recovery.md
+├── infrastructure
+│   ├── caddy
+│   │   ├── Caddyfile
+│   │   └── Caddyfile.prod
+│   ├── compose
+│   │   ├── docker-compose.dev.yml
+│   │   └── docker-compose.prod.yml
+│   ├── monitoring
+│   │   ├── alerts.yml
+│   │   └── prometheus.yml
+│   ├── nats
+│   │   └── jetstream.conf
+│   └── scripts
+│       ├── backup.sh
+│       ├── bootstrap.sh
+│       ├── harden.sh
+│       └── restore.sh
+├── migrations
+│   ├── env.py
+│   └── versions
+│       ├── 001_initial_users.py
+│       ├── 002_add_device_tables.py
+│       ├── 003_add_command_tables.py
+│       ├── 004_add_approvals_table.py
+│       ├── 005_add_emergency_stops_table.py
+│       ├── 006_add_audit_logs_table.py
+│       ├── 007_add_state_transition_constraints.py
+│       ├── 008_add_jsonb_and_outbox.py
+│       └── 009_add_notifications.py
+├── pyproject.toml
+├── pytest.ini
+├── requirements-dev.txt
+├── requirements.txt
+├── tests
+│   ├── conftest.py
+│   ├── contract
+│   │   ├── __init__.py
+│   │   └── test_websocket_protocol.py
+│   ├── integration
+│   │   ├── __init__.py
+│   │   ├── test_approval_e2e.py
+│   │   ├── test_command_pipeline.py
+│   │   ├── test_cross_owner.py
+│   │   ├── test_device_pairing.py
+│   │   └── test_emergency_stop_e2e.py
+│   ├── test_main.py
+│   └── unit
+│       ├── __init__.py
+│       ├── test_approval_service.py
+│       ├── test_auth_dependencies.py
+│       ├── test_clock.py
+│       ├── test_command_idempotency.py
+│       ├── test_emergency_stop_service.py
+│       └── test_state_machine.py
+└── uv.lock
 ```
 
-### Gaps Identified
+---
 
-**P0 Critical (7)**: WebSocket auth, welcome message, NATS ACK, emergency stop gate, approval atomicity, outbox write, health 503  
-**P1 Release (13)**: Revoke WS close, command ownership, idempotency conflict, CI MyPy, CI SAST, test suite, prod compose, backup, rate limiter, health detail, notifications, R2, scheduler  
-**P2 Quality (6)**: Pydantic style, domain errors, clock abstraction, repository protocols, baseline report, OpenAPI docs
+## 3. Import & Startup Failures
+
+Two severe import/startup issues exist in the baseline codebase:
+
+### Issue A: Python Version PEP 604 Syntax Incompatibility
+When executed with **Python 3.9** (e.g. system default `/usr/bin/python3`), importing `app/utils/clock.py` fails:
+```
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+```
+*Cause*: Python 3.9 does not support PEP 604 union syntax (e.g. `fixed_time: datetime | None = None`) without `from __future__ import annotations`. The project specifies `requires-python = ">=3.12"` in `pyproject.toml`, but system environment variables might route executions to legacy Python interpreters.
+
+### Issue B: Missing Third-Party Dependency
+When initiating Alembic (`alembic current` / `alembic upgrade`), the startup fails with:
+```
+ModuleNotFoundError: No module named 'strenum'
+```
+*Cause*: `app/api/errors.py` imports `StrEnum` from `strenum`:
+```python
+from strenum import StrEnum
+```
+However, `strenum` is not defined under `dependencies` in `pyproject.toml` nor listed in `requirements.txt`.
 
 ---
 
-## Phase 1 — Remediation Summary
+## 4. Ruff Linter & Formatter Results
 
-### Commits Applied
+### Ruff Lint Result
+Ruff reports **104 errors** across the codebase. Most errors fall into:
+- `I001`: Unsorted or unformatted import blocks
+- `F401`: Unused imports (e.g. `unittest.mock.patch` in tests, `fastapi.HTTPException` in `test_auth_dependencies.py`)
+- `F841`: Unused local variables (e.g. `result` in `test_emergency_stop_service.py:97`, `result_mock` in `test_approval_service.py:283`)
 
-| Commit | Scope | Files Changed |
+### Ruff Formatting Result
+Running `ruff format --check .` reports format mismatches across multiple Python files because formatting configurations defined in `pyproject.toml` (`[tool.ruff] line-length = 100`) have not been fully adhered to.
+
+---
+
+## 5. MyPy Type Checker Result
+
+Running `mypy .` fails immediately with:
+```
+app/api/middleware/error_handling.py: error: Source file found twice under different module names: "middleware.error_handling" and "app.api.middleware.error_handling"
+```
+
+Running type checks with explicit package bases (`mypy --explicit-package-bases .`) successfully avoids the duplicate file warning but reveals configuration limitations.
+
+---
+
+## 6. Pytest Collection & Execution Failure
+
+Pytest crashes during collection and fails to execute any tests.
+
+### Incompatibility under Python 3.12
+When using `uv run` under Python 3.12.13, Pytest collection fails with:
+```
+AttributeError: 'Package' object has no attribute 'obj'
+```
+*Cause*: Incompatibility between `pytest-asyncio==0.23.3` and `pytest==8.3.3` (both pinned in `pyproject.toml`). Under Pytest 8.x, `Package` objects no longer expose the `.obj` attribute, causing the `pytest-asyncio` plugin hooks to crash.
+
+- **Collected Tests**: 90 collected, 0 executed (collection crashed).
+- **Coverage**: **0%** due to collection failure.
+
+---
+
+## 7. Alembic Migrations Validation
+
+Running `alembic history` fails with a key lookup error:
+```
+KeyError: '008_add_jsonb_and_outbox'
+```
+
+### Analysis of the Migration Graph
+- `008_add_jsonb_and_outbox.py` defines:
+  ```python
+  revision = '008'
+  down_revision = '007'
+  ```
+- `009_add_notifications.py` incorrectly specifies:
+  ```python
+  down_revision = "008_add_jsonb_and_outbox"
+  ```
+Alembic looks for revision `'008_add_jsonb_and_outbox'`, but the identifier is simply `'008'`. This broken revision chain prevents Alembic from running any migration history commands or upgrades.
+
+---
+
+## 8. Docker Build Result (ARM64)
+
+Docker image compilation on ARM64 successfully completed for all three components:
+
+1. **API Image (`Dockerfile`)**: Successfully built (`veyaan-api:latest`)
+2. **WebSocket Gateway Image (`Dockerfile.gateway`)**: Successfully built (`veyaan-gateway:latest`)
+3. **Background Worker Image (`Dockerfile.worker`)**: Successfully built (`veyaan-worker:latest`)
+
+---
+
+## 9. Compose Configuration Validation
+
+- **Development Stack (`docker-compose.yml`)**: Validated successfully.
+- **Production Stack (`infrastructure/compose/docker-compose.prod.yml`)**: **Invalid**.
+  - *Error*: `service "scheduler" depends on undefined service "neon": invalid compose project`
+  - *Details*: The production stack has dependencies mapped to the `neon` container service (e.g. `depends_on: neon: condition: service_healthy`), but the `neon` service itself is omitted from the services block (as Neon PostgreSQL runs as an external serverless cloud platform in production).
+
+---
+
+## 10. Security Scan Result (Bandit)
+
+Bandit reports **8 security issues** (7 Low, 1 Medium):
+
+| Issue Code | Description | Severity | File / Line |
+|---|---|---|---|
+| **B105** | Hardcoded password string `INVALID_TOKEN` / `INVALID_CREDENTIAL` (false positive) | Low | `app/audit/schemas.py:43` |
+| **B110** | Try, Except, Pass detected | Low | `app/websocket/gateway.py:58` |
+| **B104** | Hardcoded bind to all interfaces (`0.0.0.0`) | Medium | `app/websocket/gateway.py:497` |
+| **B110** | Try, Except, Pass detected | Low | `app/audit/service.py:12` |
+| **B110** | Try, Except, Pass detected | Low | `app/users/service.py:12` |
+| **B110** | Try, Except, Pass detected | Low | `app/workers/command_consumer.py:132` |
+| **B110** | Try, Except, Pass detected | Low | `app/workers/outbox_publisher.py:79` |
+| **B110** | Try, Except, Pass detected | Low | `app/workers/scheduler.py:172` |
+
+---
+
+## 11. Code Review Findings
+
+### A. List of `pass` and Placeholders
+Empty `pass` statements are used to stub unimplemented methods or bypass exceptions:
+1. `app/database/connection.py:8` — Stub database closing hook.
+2. `app/websocket/gateway.py:58` — Silently swallows WebSocket close exceptions.
+3. `app/audit/service.py:12` — Empty audit log initialization.
+4. `app/users/service.py:12` — Empty user service initialization.
+5. `app/workers/command_consumer.py:132` — Empty background listener task loops.
+6. `app/workers/outbox_publisher.py:79` — Empty publisher task loops.
+7. `app/workers/scheduler.py:172` / `280` — Stubs for scheduled cron runner routines.
+8. `app/commands/service.py:22` — Empty command handler setup.
+9. `app/emergency_stop/service.py:18` — Empty emergency stop helper.
+10. `app/approvals/service.py:32` — Empty approval workflow handler.
+11. `app/devices/service.py:24` — Empty pairing flow helper.
+
+### B. Duplicate Singletons & Client Configurations
+- Valkey client imports remain standardized, but the NATS client connection does not share a single interface between the API router scope and worker scopes.
+
+---
+
+## 12. Mapping to Remediation Issues
+
+The findings map directly to the P0, P1, and P2 issue catalog:
+
+| Baseline Finding | Spec Issue Reference | Classification |
 |---|---|---|
-| `264fbb2` | All P0 critical fixes + P1 foundations | 72 files |
-| `86d7503` | P1 remaining + Phase 3 tests + Phase 4 ops | 12 files |
-| Current | P2 quality + contract tests + remaining tests | TBD |
-
-### New Files Created
-
-| File | Purpose |
-|---|---|
-| `app/websocket/protocol/challenge.py` | Ed25519 nonce generation + verification |
-| `app/auth/user_context.py` | Typed user context for dependency injection |
-| `app/commands/state_machine.py` | Explicit state machine with allowed transition map |
-| `app/events/subjects.py` | NATS subject builder functions |
-| `app/events/outbox_models.py` | SQLAlchemy outbox event model |
-| `app/notifications/models.py` | Notification record model |
-| `app/notifications/service.py` | Notification CRUD service |
-| `app/storage/r2_client.py` | Cloudflare R2 adapter (lazy init, graceful no-op) |
-| `app/api/domain_errors.py` | Typed domain error hierarchy |
-| `app/utils/clock.py` | Clock abstraction for testable time logic |
-| `migrations/versions/008_add_jsonb_and_outbox.py` | Outbox events table |
-| `migrations/versions/009_add_notifications.py` | Notification records table |
-| `infrastructure/monitoring/alerts.yml` | 13 Prometheus alert rules |
-| `docs/runbooks/gateway_restart.md` | Gateway restart procedure |
-| `docs/runbooks/nats_recovery.md` | NATS stream recovery procedure |
-| `docs/runbooks/backup_restore.md` | Full backup and restore procedure |
-| `tests/unit/test_state_machine.py` | 15 state machine tests |
-| `tests/unit/test_auth_dependencies.py` | 4 auth dependency tests |
-| `tests/unit/test_emergency_stop_service.py` | 5 emergency stop tests |
-| `tests/unit/test_command_idempotency.py` | 3 idempotency tests |
-| `tests/unit/test_approval_service.py` | 5 approval service tests |
-| `tests/unit/test_clock.py` | 9 clock abstraction tests |
-| `tests/integration/test_command_pipeline.py` | 3 pipeline atomicity tests |
-| `tests/integration/test_cross_owner.py` | 6 cross-owner security tests |
-| `tests/integration/test_emergency_stop_e2e.py` | 4 E2E emergency stop tests |
-| `tests/contract/test_websocket_protocol.py` | 7 contract / OpenAPI tests |
-
----
-
-## Current Compliance Status
-
-### Architecture Checklist
-
-- [x] WebSocket: Ed25519 challenge-response authentication
-- [x] Command state machine: explicit `ALLOWED_TRANSITIONS` + `TERMINAL_STATES`
-- [x] Outbox pattern: atomic write in same transaction as state change
-- [x] Emergency stop: checked at API layer AND gateway before send
-- [x] Approval: atomic in single DB session (decision + transition + outbox)
-- [x] NATS ACK: only after durable send confirmed
-- [x] Health: `/health/ready` returns 503 on dependency failure
-- [x] Rate limiter: X-Forwarded-For trusted only from `TRUSTED_PROXY_IPS`
-- [x] Device revoke: NATS lifecycle event triggers WebSocket close
-- [x] Idempotency: conflict detection on type mismatch (409)
-
-### CI/CD Checklist
-
-- [x] MyPy: strict, no `|| true` suppression
-- [x] Ruff: lint + format check
-- [x] Bandit SAST: fails on HIGH severity
-- [x] pip-audit: fails on known vulnerabilities
-- [x] Integration service containers (postgres, nats, valkey) in CI
-- [x] Migration drift check job
-- [x] Coverage threshold: 70%
-- [x] ARM64 Docker image builds for all 3 services
-
-### Infrastructure Checklist
-
-- [x] Production compose: internal-only NATS/Valkey/Prometheus ports
-- [x] Caddy: TLS termination, rate limiting, security headers
-- [x] Prometheus alerts: 13 rules covering pipeline, API, gateway, resources, security
-- [x] Runbooks: gateway, NATS, backup/restore
-- [x] Backup: daily encrypted backup to R2, 30-day retention
-
-### Test Coverage
-
-| Suite | Tests | Scope |
-|---|---|---|
-| Unit | ~41 | State machine, auth, emergency stop, idempotency, approvals, clock |
-| Integration | ~16 | Pipeline atomicity, cross-owner security, E2E emergency stop |
-| Contract | ~7 | Protocol version, OpenAPI schema, request schemas |
-| **Total** | **~64** | |
-
----
-
-## Known Limitations (Project 1 Scope)
-
-The following are intentionally **out of scope** for Project 1:
-
-- AI inference integration (Hermes)
-- Voice / gesture recognition
-- Production Firebase / APNS push credentials (stubbed in `NotificationService`)
-- Tailscale network configuration (infrastructure placeholder only)
-- Full E2E device pairing + WebSocket authentication test (requires running device client)
-
----
-
-## Next Steps (Post-Project-1)
-
-1. Raise test coverage from ~64 to 100+ tests with database fixtures
-2. Add OpenAPI schema snapshot diff test to detect accidental breaking changes
-3. Add Prometheus Grafana dashboard provisioning
-4. Configure Tailscale ACLs for production network isolation
-5. Implement production Firebase/APNS notification delivery
+| Insecure token URL auth | **GAP-P0-1** | P0 Critical |
+| Unverified command device ownership | **GAP-P1-2** | P1 Release |
+| Missing `strenum` dependency | **GAP-P0-7** | P0 Critical |
+| KeyError in migration chain | **GAP-P1-13** | P1 Release |
+| Invalid Compose `neon` service reference | **GAP-P1-7** | P1 Release |
+| Pytest Asyncio collection crash | **GAP-P1-6** | P1 Release |
+| PEP 604 type syntax error on Python 3.9 | **GAP-P2-2** | P2 Quality |

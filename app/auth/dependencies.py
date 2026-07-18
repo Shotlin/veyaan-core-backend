@@ -28,7 +28,8 @@ async def get_current_user_context(
     user = await repo.get_by_supabase_id(claims.sub)
     if not user:
         user = await repo.create(claims.sub, claims.email)
-    if user.status == "suspended":
+    status_val = user.status.value if hasattr(user.status, "value") else str(user.status)
+    if status_val == "suspended":
         raise ApiError(ErrorCode.FORBIDDEN, "Account suspended", status_code=403)
     return UserContext(
         id=user.id,

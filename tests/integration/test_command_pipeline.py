@@ -7,11 +7,10 @@ These tests require real service connections (postgres, nats, valkey).
 They are skipped automatically in environments without those services.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
-from tests.conftest import skip_if_no_services
+import pytest
 
 
 class TestCommandPipelineUnit:
@@ -27,7 +26,6 @@ class TestCommandPipelineUnit:
         in the SAME transaction as the command itself.
         """
         from app.commands.service import CommandService
-        from app.api.errors import ApiError
 
         owner_id = uuid4()
         device_id = uuid4()
@@ -191,8 +189,8 @@ class TestApprovalAtomicity:
         When an approval is decided as APPROVED, the outbox event for the
         command must be written in the same DB transaction.
         """
-        from app.approvals.service import ApprovalService
         from app.approvals.models import ApprovalStatus
+        from app.approvals.service import ApprovalService
 
         approval_id = uuid4()
         command_id = uuid4()
@@ -256,7 +254,7 @@ class TestApprovalAtomicity:
             mock_device.id = device_id
 
             mock_session = AsyncMock()
-            result_mock = MagicMock()
+            MagicMock()
             results = [mock_command, mock_device]
             call_idx = [0]
 
@@ -275,7 +273,7 @@ class TestApprovalAtomicity:
             mock_db.return_value = mock_session
 
             service = ApprovalService()
-            result = await service.decide_approval(
+            await service.decide_approval(
                 approval_id=approval_id,
                 owner_id=owner_id,
                 decision="approve",

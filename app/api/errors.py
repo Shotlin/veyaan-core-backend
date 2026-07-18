@@ -1,6 +1,5 @@
+from enum import StrEnum
 from typing import Optional
-
-from strenum import StrEnum
 
 
 class ErrorCode(StrEnum):

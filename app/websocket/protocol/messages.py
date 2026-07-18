@@ -6,14 +6,14 @@ from pydantic import BaseModel
 
 
 class HelloMessage(BaseModel):
-    type: Literal["hello"]
+    type: Literal["hello"] = "hello"
     device_id: UUID
     protocol_version: str
     app_version: str
 
 
 class HeartbeatMessage(BaseModel):
-    type: Literal["heartbeat"]
+    type: Literal["heartbeat"] = "heartbeat"
     device_time: datetime
     state: str
     active_command_count: int
@@ -21,7 +21,7 @@ class HeartbeatMessage(BaseModel):
 
 
 class CommandAckMessage(BaseModel):
-    type: Literal["acknowledge"]
+    type: Literal["acknowledge"] = "acknowledge"
     command_id: UUID
     accepted: bool
     rejection_reason: Optional[str] = None
@@ -29,7 +29,7 @@ class CommandAckMessage(BaseModel):
 
 
 class CommandProgressMessage(BaseModel):
-    type: Literal["progress"]
+    type: Literal["progress"] = "progress"
     command_id: UUID
     progress_percent: Optional[int] = None
     stage: Optional[str] = None
@@ -37,7 +37,7 @@ class CommandProgressMessage(BaseModel):
 
 
 class CommandResultMessage(BaseModel):
-    type: Literal["result"]
+    type: Literal["result"] = "result"
     command_id: UUID
     success: bool
     result_data: Optional[dict] = None
@@ -48,14 +48,14 @@ class CommandResultMessage(BaseModel):
 
 
 class DeviceStatusUpdateMessage(BaseModel):
-    type: Literal["status_update"]
+    type: Literal["status_update"] = "status_update"
     state: str
     metadata: Optional[dict] = None
 
 
 # Server to device messages
 class WelcomeMessage(BaseModel):
-    type: Literal["welcome"]
+    type: Literal["welcome"] = "welcome"
     connection_id: UUID
     server_time: datetime
     heartbeat_interval: int
@@ -64,7 +64,7 @@ class WelcomeMessage(BaseModel):
 
 
 class CommandRequestMessage(BaseModel):
-    type: Literal["command"]
+    type: Literal["command"] = "command"
     command_id: UUID
     command_type: str
     parameters: dict
@@ -74,26 +74,26 @@ class CommandRequestMessage(BaseModel):
 
 
 class CancelCommandMessage(BaseModel):
-    type: Literal["cancel"]
+    type: Literal["cancel"] = "cancel"
     command_id: UUID
     reason: str
 
 
 class EmergencyStopMessage(BaseModel):
-    type: Literal["emergency_stop"]
+    type: Literal["emergency_stop"] = "emergency_stop"
     reason: str
 
 
 class ResumeAfterEmergencyStopMessage(BaseModel):
-    type: Literal["resume"]
+    type: Literal["resume"] = "resume"
 
 
 class PingMessage(BaseModel):
-    type: Literal["ping"]
+    type: Literal["ping"] = "ping"
 
 
 class ConfigRefreshMessage(BaseModel):
-    type: Literal["config_refresh"]
+    type: Literal["config_refresh"] = "config_refresh"
     config: dict
 
 

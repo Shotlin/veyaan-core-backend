@@ -84,6 +84,7 @@ class Command(Base):
     device = relationship("Device", back_populates="commands")
     task = relationship("Task", back_populates="command", uselist=False, cascade="all, delete-orphan")
     state_events = relationship("CommandStateEvent", back_populates="command", cascade="all, delete-orphan")
+    approval = relationship("Approval", back_populates="command", uselist=False, cascade="all, delete-orphan")
 
     __table_args__ = (
         UniqueConstraint("device_id", "idempotency_key", name="uq_device_idempotency"),

@@ -6,13 +6,13 @@ Tests the full approval flow:
   high-risk command → AWAITING_APPROVAL → reject → REJECTED → no outbox
 """
 
-import pytest
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-from datetime import datetime, timezone, timedelta
+
+import pytest
 
 from app.approvals.models import ApprovalStatus
-from app.commands.models import CommandState
 
 
 class TestApprovalE2E:

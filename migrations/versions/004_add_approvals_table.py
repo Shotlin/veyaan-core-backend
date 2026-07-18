@@ -38,11 +38,11 @@ def upgrade() -> None:
 
     # Add CHECK constraints for enum-like fields
     op.execute("""
-        ALTER TABLE approvals ADD CONSTRAINT chk_approval_risk_level 
+        ALTER TABLE approvals ADD CONSTRAINT chk_approval_risk_level
         CHECK (risk_level IN ('low', 'medium', 'high', 'prohibited'))
     """)
     op.execute("""
-        ALTER TABLE approvals ADD CONSTRAINT chk_approval_status 
+        ALTER TABLE approvals ADD CONSTRAINT chk_approval_status
         CHECK (status IN ('pending', 'approved', 'rejected', 'expired'))
     """)
 

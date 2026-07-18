@@ -4,9 +4,10 @@ Cross-owner security tests.
 Verifies that users cannot access or modify resources owned by other users.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
+
+import pytest
 
 
 class TestCrossOwnerIsolation:
@@ -50,7 +51,7 @@ class TestCrossOwnerIsolation:
         from app.devices.service import DeviceService
 
         user_a = uuid4()
-        user_b = uuid4()
+        uuid4()
         device_id = uuid4()
 
         with patch("app.devices.service.get_db_session") as mock_db, \

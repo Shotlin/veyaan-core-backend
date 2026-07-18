@@ -3,18 +3,17 @@
 Tests every documented allowed and denied transition.
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
+
+import pytest
 
 from app.commands.models import CommandState
 from app.commands.state_machine import (
-    ALLOWED_TRANSITIONS,
     TERMINAL_STATES,
     StateTransitionError,
     transition_command,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

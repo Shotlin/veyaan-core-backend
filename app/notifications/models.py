@@ -2,10 +2,9 @@
 
 import uuid
 
-from sqlalchemy import Column, DateTime, String, Text, func
+from sqlalchemy import Column, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy import ForeignKey
 
 from app.database.connection import Base
 

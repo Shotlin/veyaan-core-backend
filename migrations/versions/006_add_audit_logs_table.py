@@ -40,15 +40,15 @@ def upgrade() -> None:
 
     # Add CHECK constraints for enum-like fields
     op.execute("""
-        ALTER TABLE audit_logs ADD CONSTRAINT chk_audit_category 
+        ALTER TABLE audit_logs ADD CONSTRAINT chk_audit_category
         CHECK (category IN ('auth', 'device', 'command', 'approval', 'emergency_stop', 'security', 'system'))
     """)
     op.execute("""
-        ALTER TABLE audit_logs ADD CONSTRAINT chk_audit_action 
+        ALTER TABLE audit_logs ADD CONSTRAINT chk_audit_action
         CHECK (action IN (
             'login', 'logout', 'token_refresh',
             'device_pair_started', 'device_pair_confirmed', 'device_revoked', 'device_connected', 'device_disconnected',
-            'command_created', 'command_delivered', 'command_acknowledged', 'command_started', 'command_succeeded', 
+            'command_created', 'command_delivered', 'command_acknowledged', 'command_started', 'command_succeeded',
             'command_failed', 'command_cancelled', 'command_expired', 'command_blocked',
             'approval_created', 'approval_approved', 'approval_rejected', 'approval_expired',
             'emergency_stop_activated', 'emergency_stop_released',
@@ -57,7 +57,7 @@ def upgrade() -> None:
         ))
     """)
     op.execute("""
-        ALTER TABLE audit_logs ADD CONSTRAINT chk_audit_result 
+        ALTER TABLE audit_logs ADD CONSTRAINT chk_audit_result
         CHECK (result IN ('success', 'failure', 'blocked', 'error'))
     """)
 

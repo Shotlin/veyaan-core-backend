@@ -14,10 +14,8 @@ Usage:
 """
 
 from typing import Any, Optional
-from uuid import UUID
 
 from app.api.errors import ApiError, ErrorCode
-
 
 # ---------------------------------------------------------------------------
 # Base domain error

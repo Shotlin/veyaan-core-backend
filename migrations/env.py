@@ -10,9 +10,9 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 # Add the app directory to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
+import app.database.models  # noqa: F401 - ensure all models are loaded for autogeneration
 from app.config import settings
 from app.database.connection import Base
-import app.database.models  # noqa: F401 - ensure all models are loaded for autogeneration
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

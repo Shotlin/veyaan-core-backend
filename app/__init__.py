@@ -1,0 +1,1 @@
+"""VEYAAN app package init."""

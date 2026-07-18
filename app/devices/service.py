@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
@@ -170,9 +171,10 @@ class DeviceService:
 
                 # Signal gateway to close this device's WebSocket connection
                 try:
+                    import json
+
                     from app.events import subjects
                     from app.events.nats_client import nats_client
-                    import json
                     await nats_client.publish(
                         subjects.device_lifecycle(str(device_id)),
                         json.dumps({

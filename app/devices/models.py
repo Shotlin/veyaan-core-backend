@@ -75,6 +75,7 @@ class Device(Base):
 
     credentials = relationship("DeviceCredential", back_populates="device", cascade="all, delete-orphan")
     owner = relationship("User", back_populates="devices")
+    commands = relationship("Command", back_populates="device", cascade="all, delete-orphan")
 
     @staticmethod
     def generate_pairing_code() -> tuple[str, str]:

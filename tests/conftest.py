@@ -9,7 +9,6 @@ Unit tests use mocks only and do not require running services.
 
 import asyncio
 import os
-from typing import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 

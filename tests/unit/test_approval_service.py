@@ -5,12 +5,12 @@ Tests approval create, decide (approve/reject), nonce replay, and expiry.
 Uses FakeClock for deterministic time control.
 """
 
-import pytest
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-from datetime import datetime, timezone, timedelta
 
-from app.utils.clock import FakeClock
+import pytest
+
 from app.approvals.models import ApprovalStatus
 
 
@@ -58,7 +58,7 @@ class TestApprovalDecision:
             async def get_approval_side(aid):
                 call_count[0] += 1
                 return approval if call_count[0] == 1 else decided_approval
-            
+
             mock_repo = AsyncMock()
             mock_repo.get_approval = AsyncMock(side_effect=get_approval_side)
             mock_repo.decide_approval = AsyncMock(return_value=(True, None))
@@ -141,8 +141,8 @@ class TestApprovalDecision:
     @pytest.mark.asyncio
     async def test_already_decided_raises_error(self):
         """Deciding an already-decided approval raises APPROVAL_ALREADY_DECIDED."""
-        from app.approvals.service import ApprovalService
         from app.api.errors import ApiError
+        from app.approvals.service import ApprovalService
 
         owner_id = uuid4()
         # Approval is already APPROVED
@@ -175,8 +175,8 @@ class TestApprovalDecision:
     @pytest.mark.asyncio
     async def test_expired_approval_raises_error(self):
         """Deciding an expired approval raises APPROVAL_EXPIRED."""
-        from app.approvals.service import ApprovalService
         from app.api.errors import ApiError
+        from app.approvals.service import ApprovalService
 
         owner_id = uuid4()
         past_time = datetime.now(timezone.utc) - timedelta(minutes=60)
@@ -264,7 +264,6 @@ class TestApprovalCreate:
         mock_device = MagicMock()
         mock_device.owner_id = owner_id
 
-        approval_created = [None]
 
         with patch("app.approvals.service.get_db_session") as mock_db, \
              patch("app.approvals.service.ApprovalRepository") as mock_repo_class, \
@@ -280,7 +279,7 @@ class TestApprovalCreate:
             mock_repo_class.return_value = mock_repo
 
             mock_session = AsyncMock()
-            result_mock = MagicMock()
+            MagicMock()
 
             call_count = [0]
             async def execute_side(stmt, **kw):
