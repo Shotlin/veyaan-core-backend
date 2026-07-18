@@ -1,0 +1,187 @@
+groups:
+  - name: veyaan_pipeline
+    rules:
+      # Command pipeline lag — outbox events not being published
+      - alert: OutboxPublisherLag
+        expr: |
+          (
+            count(veyaan_outbox_pending_events) by (job) > 50
+          )
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Outbox publisher lag detected"
+          description: "More than 50 pending outbox events for {{ $labels.job }}. Outbox publisher may be stuck."
+
+      - alert: OutboxPublisherCriticalLag
+        expr: |
+          (
+            count(veyaan_outbox_pending_events) by (job) > 200
+          )
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical outbox publisher lag"
+          description: "More than 200 pending outbox events. Command delivery is severely delayed."
+
+      # Commands stuck in QUEUED state for too long
+      - alert: CommandsStuckQueued
+        expr: |
+          veyaan_commands_in_state{state="queued"} > 10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Commands stuck in QUEUED state"
+          description: "{{ $value }} commands have been QUEUED for over 10 minutes."
+
+      # Dead outbox events (permanently failed)
+      - alert: OutboxDeadEvents
+        expr: |
+          veyaan_outbox_failed_events > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Dead outbox events detected"
+          description: "{{ $value }} outbox events have failed permanently. Manual intervention required."
+
+  - name: veyaan_api_errors
+    rules:
+      # High error rate
+      - alert: ApiHighErrorRate
+        expr: |
+          (
+            rate(http_requests_total{status=~"5.."}[5m])
+            /
+            rate(http_requests_total[5m])
+          ) > 0.05
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API error rate"
+          description: "API 5xx error rate is {{ $value | humanizePercentage }} over last 5 minutes."
+
+      - alert: ApiCriticalErrorRate
+        expr: |
+          (
+            rate(http_requests_total{status=~"5.."}[5m])
+            /
+            rate(http_requests_total[5m])
+          ) > 0.20
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical API error rate"
+          description: "API 5xx error rate is {{ $value | humanizePercentage }}. Immediate investigation required."
+
+      # API latency p99 > 2 seconds
+      - alert: ApiHighLatency
+        expr: |
+          histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m])) > 2.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API latency (p99)"
+          description: "p99 API latency is {{ $value | humanizeDuration }}."
+
+  - name: veyaan_gateway
+    rules:
+      # Gateway down
+      - alert: GatewayDown
+        expr: up{job="veyaan-gateway"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "WebSocket Gateway is down"
+          description: "The VEYAAN WebSocket Gateway is unreachable. Device connections cannot be established."
+
+      # No active WebSocket connections (may indicate all devices disconnected)
+      - alert: GatewayNoConnections
+        expr: veyaan_gateway_active_connections == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No active gateway connections"
+          description: "No devices are connected to the WebSocket gateway for 15+ minutes."
+
+      # Gateway restart loop
+      - alert: GatewayRestartLoop
+        expr: |
+          changes(process_start_time_seconds{job="veyaan-gateway"}[10m]) > 2
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Gateway is restarting repeatedly"
+          description: "Gateway has restarted {{ $value }} times in the last 10 minutes."
+
+  - name: veyaan_resources
+    rules:
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            process_resident_memory_bytes{job=~"veyaan-.*"}
+            /
+            1024 / 1024
+          ) > 400
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "{{ $labels.job }} is using {{ $value | humanize }}MB of memory."
+
+      # NATS connection lost
+      - alert: NatsConnectionLost
+        expr: |
+          veyaan_nats_connected == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "NATS connection lost"
+          description: "{{ $labels.job }} has lost connection to NATS. Command delivery is impaired."
+
+      # Valkey connection lost
+      - alert: ValkeyConnectionLost
+        expr: |
+          veyaan_valkey_connected == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Valkey connection lost"
+          description: "{{ $labels.job }} has lost connection to Valkey. Rate limiting and session management impaired."
+
+  - name: veyaan_security
+    rules:
+      # Emergency stop activation
+      - alert: EmergencyStopActivated
+        expr: |
+          veyaan_emergency_stop_active > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Emergency stop activated"
+          description: "Emergency stop has been activated for {{ $value }} owner(s). Command delivery is blocked."
+
+      # High rate of auth failures
+      - alert: AuthFailureSpike
+        expr: |
+          rate(veyaan_auth_failures_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High authentication failure rate"
+          description: "Auth failure rate is {{ $value | humanize }}/s. Possible brute force attempt."

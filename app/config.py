@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     R2_ACCESS_KEY_ID: str = ""
     R2_SECRET_ACCESS_KEY: str = ""
     R2_BUCKET: str = "veyaan-dev"
+    R2_BUCKET_NAME: str = "veyaan-dev"  # alias used by r2_client.py
+    R2_ENDPOINT_URL: str = ""  # e.g. https://<account_id>.r2.cloudflarestorage.com
     R2_PUBLIC_URL: str = ""
 
     # Security
@@ -65,6 +67,11 @@ class Settings(BaseSettings):
     APPROVAL_TTL_MINUTES: int = 30
     IDEMPOTENCY_TTL_HOURS: int = 24
     EMERGENCY_STOP_CACHE_TTL: int = 60
+
+    # Trusted reverse proxies — only these IPs may set X-Forwarded-For
+    # In production this is the Caddy container's network IP (e.g. 172.x.x.x)
+    # Leave empty to disable proxy header trust (fall back to direct client IP)
+    TRUSTED_PROXY_IPS: list[str] = []
 
     # Rate Limits
     RATE_LIMIT_AUTH_FAILURES: int = 5
@@ -79,7 +86,7 @@ class Settings(BaseSettings):
     OTEL_EXPORTER_OTLP_ENDPOINT: str = ""
     SENTRY_DSN: str = ""
 
-    @field_validator("ALLOWED_ORIGINS", "WS_SUPPORTED_PROTOCOLS", mode="before")
+    @field_validator("ALLOWED_ORIGINS", "WS_SUPPORTED_PROTOCOLS", "TRUSTED_PROXY_IPS", mode="before")
     @classmethod
     def parse_list_fields(cls, v):
         return parse_list(v)

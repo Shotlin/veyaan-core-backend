@@ -55,13 +55,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if hasattr(request.state, "user_id"):
             return f"user:{request.state.user_id}"
 
-        forwarded_for = request.headers.get("X-Forwarded-For")
-        if forwarded_for:
-            ip = forwarded_for.split(",")[0].strip()
-        else:
-            ip = request.client.host if request.client else "unknown"
+        client_ip = request.client.host if request.client else "unknown"
 
-        return f"ip:{ip}"
+        # GAP-P1-9: Trust X-Forwarded-For ONLY from configured trusted proxy IPs (Caddy)
+        trusted = settings.TRUSTED_PROXY_IPS
+        if trusted and client_ip in trusted:
+            forwarded_for = request.headers.get("X-Forwarded-For")
+            if forwarded_for:
+                # Take the leftmost (original client) IP from the chain
+                ip = forwarded_for.split(",")[0].strip()
+                return f"ip:{ip}"
+
+        return f"ip:{client_ip}"
 
     def _get_rate_limit(self, request: Request) -> tuple[int, int]:
         path = request.url.path
