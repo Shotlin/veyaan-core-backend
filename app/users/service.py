@@ -2,7 +2,7 @@ from typing import Optional
 from uuid import UUID
 
 from app.auth.models import TokenClaims
-from app.database.session import get_db_session as session_scope
+from app.database.session import get_db_session_context as session_scope
 from app.users.models import User
 from app.users.repository import UserRepository
 

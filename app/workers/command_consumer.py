@@ -1,162 +1,140 @@
-"""Command consumer worker for processing commands from NATS."""
+"""Command lifecycle consumer worker."""
 
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
 
 from app.cache import valkey_client
-from app.commands.models import Command
-from app.commands.repository import CommandRepository
-from app.commands.service import CommandService
+from app.commands.models import CommandState, TaskState
+from app.commands.service import TaskService
+from app.commands.state_machine import transition_command
 from app.config import settings
-from app.database.session import get_db_session
+from app.database.connection import close_db, init_db
+from app.database.session import get_db_session_context as get_db_session
 from app.events.nats_client import nats_client
-from app.websocket.gateway import connection_manager
-
-import nats
-import json
-import logging
 
 logger = logging.getLogger(__name__)
 
 
-class CommandConsumer:
+class CommandLifecycleConsumer:
     def __init__(self):
         self.running = False
         self.subscription = None
 
     async def start(self):
-        """Start the command consumer."""
         self.running = True
-        logger.info("Starting command consumer")
+        logger.info("Starting command lifecycle consumer")
 
-        # Subscribe to command delivery subject
-        self.subscription = await nats_client.subscribe(
-            "veyaan.commands.ready",
-            durable=settings.NATS_CONSUMER_GATEWAY,
-            stream=settings.NATS_STREAM_COMMANDS
+        sub = await nats_client.subscribe_durable(
+            "veyaan.command.result.>",
+            durable_name="api_result_consumer",
+            stream=settings.NATS_STREAM_COMMANDS,
         )
 
-        logger.info("Command consumer started")
+        logger.info("Command lifecycle consumer started")
 
         while self.running:
             try:
-                await self._process_batch()
+                msgs = await sub.fetch(batch=10, timeout=1)
+                for msg in msgs:
+                    try:
+                        await self._handle_message(msg)
+                        await msg.ack()
+                    except Exception as e:
+                        logger.exception("Failed to process message", error=str(e))
+                        await msg.nak()
+            except asyncio.TimeoutError:
+                continue
             except Exception as e:
-                logger.exception("Command consumer error", error=str(e))
-            await asyncio.sleep(1)
+                if "connection closed" in str(e).lower():
+                    break
+                logger.exception("Consumer error", error=str(e))
+                await asyncio.sleep(1)
 
     def stop(self):
-        """Stop the command consumer."""
         self.running = False
 
-    async def _process_batch(self):
-        """Process a batch of commands from NATS."""
-        messages = await self.subscription.fetch(batch=10, timeout=1)
-
-        for msg in messages:
-            try:
-                await self._handle_message(msg)
-                await msg.ack()
-            except Exception as e:
-                logger.exception("Failed to process command", error=str(e))
-                await msg.nak()
-
     async def _handle_message(self, msg):
-        """Handle a single command message."""
+        from app.commands.repository import CommandRepository
+
         payload = json.loads(msg.data.decode())
+        subject = msg.subject
 
-        command_id = payload["command_id"]
-        device_id = payload["device_id"]
-        command_type = payload["command_type"]
-        parameters = payload["parameters"]
-        expires_at = payload.get("expires_at")
-        risk_level = payload["risk_level"]
-        trace_id = payload.get("trace_id")
+        command_id = payload.get("command_id")
 
-        logger.info("Processing command", command_id=command_id, device_id=device_id, type=command_type)
+        if not command_id:
+            logger.warning("No command_id in message")
+            return
 
         async with get_db_session() as session:
-            repo = CommandRepository(session)
-
-            # Get the command from database
-            command = await repo.get_by_id(command_id)
+            cmd_repo = CommandRepository(session)
+            command = await cmd_repo.get_by_id(command_id)
             if not command:
                 logger.warning("Command not found", command_id=command_id)
                 return
 
-            # Check if command has expired
-            if expires_at and datetime.fromisoformat(expires_at).replace(tzinfo=None) < datetime.now(timezone.utc):
-                await session.execute(
-                    Command.__table__.update()
-                    .where(Command.id == command_id)
-                    .values(state="expired")
-                )
-                await session.commit()
-                logger.warning("Command expired", command_id=command_id)
-                return
+            if "result" in subject:
+                success = payload.get("success", False)
+                if success:
+                    await transition_command(
+                        session, command_id, CommandState.SUCCEEDED, "device",
+                        metadata={
+                            "result_data": payload.get("result_data"),
+                            "result_summary": "success" if success else "failed",
+                        },
+                    )
+                else:
+                    await transition_command(
+                        session, command_id, CommandState.FAILED, "device",
+                        metadata={
+                            "error_code": payload.get("error_code"),
+                            "error_message": payload.get("error_message"),
+                        },
+                    )
 
-            # Check if device is connected
-            if not connection_manager.is_connected(device_id):
-                logger.warning("Device not connected, command will be queued", device_id=device_id)
-                # Command will be retried when device connects
-                return
+                task_service = TaskService()
+                task = await task_service.get_task_by_command(command_id)
+                if task:
+                    new_state = TaskState.SUCCEEDED if success else TaskState.FAILED
+                    await task_service.update_task_state(
+                        task.id, new_state,
+                        result_summary="success" if success else "failed",
+                        error_code=payload.get("error_code"),
+                        error_message=payload.get("error_message"),
+                    )
 
-            # Update state to DELIVERED
-            await session.execute(
-                Command.__table__.update()
-                .where(Command.id == command_id)
-                .values(state="delivered", delivered_at=datetime.now(timezone.utc))
-            )
-            await session.flush()
+            elif "acknowledged" in subject:
+                accepted = payload.get("accepted", True)
+                if accepted:
+                    await transition_command(session, command_id, CommandState.ACKNOWLEDGED, "device")
+                else:
+                    await transition_command(session, command_id, CommandState.FAILED, "device",
+                                             metadata={"error_message": payload.get("rejection_reason")})
 
-            # Send command to device via WebSocket
-            from app.websocket.protocol.messages import CommandRequestMessage
-
-            command_msg = CommandRequestMessage(
-                command_id=command_id,
-                command_type=command_type,
-                parameters=parameters,
-                expires_at=expires_at,
-                risk_metadata={"level": risk_level},
-                trace_id=trace_id
-            )
-
-            sent = await connection_manager.send_command(device_id, command_msg)
-            if not sent:
-                logger.warning("Failed to deliver command, device may have disconnected", device_id=device_id)
-                # Re-queue for later delivery
-                return
+            elif "progress" in subject:
+                if command.state == CommandState.ACKNOWLEDGED.value:
+                    await transition_command(session, command_id, CommandState.RUNNING, "device")
 
             await session.commit()
-            logger.info("Command delivered", command_id=command_id, device_id=device_id)
 
 
 async def main():
-    """Main entry point for command consumer worker."""
-    import logging
     logging.basicConfig(level=logging.INFO)
-
-    from app.cache import valkey_client
-    from app.config import settings
-    from app.database.connection import close_db, init_db
-    from app.events.nats_client import nats_client
 
     await init_db()
     await valkey_client.connect()
+    await nats_client.connect()
 
-    nats_client.nc = await nats.connect(settings.NATS_URL)
-    nats_client.js = nats_client.nc.jetstream()
-
-    consumer = CommandConsumer()
+    consumer = CommandLifecycleConsumer()
     try:
         await consumer.start()
+    except KeyboardInterrupt:
+        pass
     finally:
         await nats_client.disconnect()
+        await valkey_client.disconnect()
         await close_db()
 
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())

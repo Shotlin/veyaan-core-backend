@@ -3,15 +3,18 @@ from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.errors import ApiError, ErrorCode
 from app.commands.models import Command, CommandState, CommandStateEvent, Task, TaskState
 from app.commands.registry import command_registry
 from app.commands.repository import CommandRepository
 from app.commands.schemas import CreateCommandRequest, CreateCommandResponse
-from app.database.session import get_db_session
+from app.commands.state_machine import StateTransitionError, transition_command
+from app.database.session import get_db_session_context as get_db_session
+from app.devices.repository import DeviceRepository
 from app.emergency_stop.service import EmergencyStopService
-from app.events.nats_client import nats_client
+from app.events import subjects
+from app.events.outbox import OutboxRepository
 
 
 class CommandService:
@@ -21,15 +24,28 @@ class CommandService:
     async def create_command(self, request: CreateCommandRequest, owner_id: UUID) -> CreateCommandResponse:
         async with get_db_session() as session:
             repo = CommandRepository(session)
+            device_repo = DeviceRepository(session)
 
-            # Check emergency stop before creating command
+            device = await device_repo.get_device(request.device_id)
+            if not device or str(device.owner_id) != str(owner_id):
+                raise ApiError(ErrorCode.DEVICE_NOT_FOUND, "Device not found", status_code=404)
+
+            if device.trust_status.value != "trusted":
+                raise ApiError(ErrorCode.DEVICE_REVOKED, "Device is not trusted", status_code=403)
+
             emergency_stop_service = EmergencyStopService()
             if await emergency_stop_service.is_active(owner_id):
-                raise ValueError("Emergency stop is active. Cannot create new commands.")
+                raise ApiError(ErrorCode.EMERGENCY_STOP_ACTIVE, "Emergency stop is active. Cannot create new commands.", status_code=423)
 
-            # Check idempotency
             existing = await repo.get_by_idempotency_key(request.device_id, request.idempotency_key)
             if existing:
+                # GAP-P1-3: Conflict detection — same key + different command_type is a conflict
+                if existing.command_type != request.command_type:
+                    raise ApiError(
+                        ErrorCode.IDEMPOTENCY_CONFLICT,
+                        "Idempotency key already used with a different command type",
+                        status_code=409,
+                    )
                 task = await repo.get_task(existing.id)
                 return CreateCommandResponse(
                     command_id=existing.id,
@@ -38,26 +54,22 @@ class CommandService:
                     requires_approval=existing.requires_approval,
                 )
 
-            # Validate command type
             definition = command_registry.get(request.command_type)
             if not definition:
-                raise ValueError(f"Unknown command type: {request.command_type}")
+                raise ApiError(ErrorCode.INVALID_COMMAND_TYPE, f"Unknown command type: {request.command_type}", status_code=422)
 
-            # Validate parameters
             definition.parameter_schema(**request.parameters)
 
-            # Determine risk and approval
             requires_approval = definition.requires_approval or request.requires_approval
-            initial_state = CommandState.AWAITING_APPROVAL if requires_approval else CommandState.QUEUED
+            initial_state = CommandState.RECEIVED
 
-            # Create command
             command = Command(
                 device_id=request.device_id,
                 command_type=request.command_type,
                 parameters=request.parameters,
-                risk_level=definition.risk_level,
+                risk_level=definition.risk_level.value,
                 idempotency_key=request.idempotency_key,
-                state=initial_state,
+                state=initial_state.value,
                 requires_approval=requires_approval,
                 delayed_execution_allowed=request.delayed_execution_allowed or definition.delayed_execution_allowed,
                 expires_at=request.expires_at,
@@ -65,23 +77,39 @@ class CommandService:
             session.add(command)
             await session.flush()
 
-            # Create task
             task = Task(command_id=command.id, state=TaskState.PENDING)
             session.add(task)
             await session.flush()
 
-            # Record state event
             event = CommandStateEvent(
                 command_id=command.id,
                 previous_state=None,
-                new_state=initial_state,
+                new_state=initial_state.value,
                 event_source="api",
             )
             session.add(event)
 
-            # If queued (not awaiting approval), publish to NATS
-            if initial_state == CommandState.QUEUED:
-                await self._publish_command(session, command)
+            if requires_approval:
+                await transition_command(session, command.id, CommandState.VALIDATED, "api")
+                await transition_command(session, command.id, CommandState.AWAITING_APPROVAL, "api")
+            else:
+                await transition_command(session, command.id, CommandState.VALIDATED, "api")
+                await transition_command(session, command.id, CommandState.QUEUED, "api")
+                outbox_repo = OutboxRepository(session)
+                await outbox_repo.add_event(
+                    event_type="command.queued",
+                    aggregate_type="command",
+                    aggregate_id=str(command.id),
+                    subject=subjects.command_ready(str(device.id)),
+                    payload={
+                        "command_id": str(command.id),
+                        "device_id": str(device.id),
+                        "command_type": command.command_type,
+                        "parameters": command.parameters,
+                        "expires_at": command.expires_at.isoformat() if command.expires_at else None,
+                        "risk_level": command.risk_level,
+                    },
+                )
 
             await session.commit()
 
@@ -104,12 +132,12 @@ class CommandService:
             if not command or str(command.device.owner_id) != str(owner_id):
                 return False
 
-            if command.state not in (CommandState.QUEUED, CommandState.AWAITING_APPROVAL, CommandState.APPROVED):
+            try:
+                await transition_command(session, command.id, CommandState.CANCELLED, "api")
+                await session.commit()
+                return True
+            except StateTransitionError:
                 return False
-
-            await repo.update_state(command_id, CommandState.CANCELLED, "api")
-            await session.commit()
-            return True
 
     async def list_commands(
         self,
@@ -138,47 +166,32 @@ class CommandService:
             )
             return commands, total
 
-    async def get_state_events(self, command_id: UUID):
+    async def get_state_events(self, command_id: UUID, owner_id: UUID):
         async with get_db_session() as session:
             repo = CommandRepository(session)
+            command = await repo.get_by_id(command_id)
+            if not command or str(command.device.owner_id) != str(owner_id):
+                return []
             return await repo.get_state_events(command_id)
 
-    async def _publish_command(self, session: AsyncSession, command: Command):
-        """Publish command to NATS for delivery to device."""
-        import json
+    async def approve_command(self, command_id: UUID) -> bool:
+        async with get_db_session() as session:
+            try:
+                await transition_command(session, command_id, CommandState.APPROVED, "approval")
+                await transition_command(session, command_id, CommandState.QUEUED, "approval")
+                await session.commit()
+                return True
+            except StateTransitionError:
+                return False
 
-        payload = {
-            "command_id": str(command.id),
-            "device_id": str(command.device_id),
-            "command_type": command.command_type,
-            "parameters": command.parameters,
-            "expires_at": command.expires_at.isoformat() if command.expires_at else None,
-            "risk_level": command.risk_level.value,
-            "trace_id": f"cmd-{command.id}",
-        }
-
-        await nats_client.publish(
-            "veyaan.commands.deliver",
-            json.dumps(payload).encode(),
-            headers={"command_id": str(command.id)},
-        )
-
-        # Update state to DELIVERED
-        await session.execute(
-            update(Command)
-            .where(Command.id == command.id)
-            .values(state=CommandState.DELIVERED, delivered_at=datetime.now(timezone.utc))
-        )
-        await session.flush()
-
-        # Record event
-        event = CommandStateEvent(
-            command_id=command.id,
-            previous_state=CommandState.QUEUED,
-            new_state=CommandState.DELIVERED,
-            event_source="api",
-        )
-        session.add(event)
+    async def reject_command(self, command_id: UUID) -> bool:
+        async with get_db_session() as session:
+            try:
+                await transition_command(session, command_id, CommandState.REJECTED, "approval")
+                await session.commit()
+                return True
+            except StateTransitionError:
+                return False
 
 
 class TaskService:
@@ -194,9 +207,8 @@ class TaskService:
 
     async def update_task_state(self, task_id: UUID, state: TaskState, result_summary: str = None, error_code: str = None, error_message: str = None):
         async with get_db_session() as session:
-            # Increment attempt count when transitioning to RUNNING
             values = {
-                "state": state,
+                "state": state.value,
                 "started_at": datetime.now(timezone.utc) if state == TaskState.RUNNING else None,
                 "finished_at": datetime.now(timezone.utc) if state in (TaskState.SUCCEEDED, TaskState.FAILED, TaskState.CANCELLED) else None,
                 "result_summary": result_summary,
@@ -204,7 +216,6 @@ class TaskService:
                 "error_message": error_message,
             }
             if state == TaskState.RUNNING:
-                # Increment attempt count
                 result = await session.execute(select(Task.attempt_count).where(Task.id == task_id))
                 current_attempt = result.scalar_one_or_none()
                 values["attempt_count"] = (current_attempt or 0) + 1

@@ -32,8 +32,10 @@ async def get_session() -> AsyncSession:
 
 
 async def init_db():
+    """Initialize database connection. Schema managed by Alembic only."""
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        from sqlalchemy import text
+        await conn.execute(text("SELECT 1"))
 
 
 async def close_db():

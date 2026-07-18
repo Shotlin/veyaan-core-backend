@@ -4,9 +4,12 @@ from uuid import UUID
 
 from sqlalchemy import select
 
+from app.audit.models import AuditAction, AuditCategory
+from app.audit.service import AuditService
 from app.cache import valkey_client
-from app.database.session import get_db_session
+from app.database.session import get_db_session_context as get_db_session
 from app.emergency_stop.models import EmergencyStop
+from app.events import subjects
 from app.events.nats_client import nats_client
 
 
@@ -14,75 +17,91 @@ class EmergencyStopService:
     def __init__(self):
         pass
 
-    async def is_active(self, user_id: UUID) -> bool:
-        """Check if emergency stop is active for user."""
-        # Check Valkey cache first
-        cached = await valkey_client.get(f"emergency_stop:{user_id}")
-        if cached:
-            return cached.get("active", False)
+    async def is_active(self, owner_id: UUID) -> bool:
+        cached = await valkey_client.get(f"emergency_stop:{owner_id}")
+        if cached is not None:
+            if isinstance(cached, dict):
+                return cached.get("active", False)
+            return bool(cached)
 
-        # Fallback to database
         async with get_db_session() as session:
             result = await session.execute(
-                select(EmergencyStop).where(EmergencyStop.user_id == user_id)
+                select(EmergencyStop).where(EmergencyStop.owner_id == owner_id)
             )
             emergency_stop = result.scalar_one_or_none()
             if emergency_stop and emergency_stop.active:
-                # Cache for 60 seconds
                 await valkey_client.set(
-                    f"emergency_stop:{user_id}",
-                    {"active": True, "activated_at": emergency_stop.activated_at.isoformat()},
+                    f"emergency_stop:{owner_id}",
+                    {"active": True, "activated_at": emergency_stop.activated_at.isoformat() if emergency_stop.activated_at else None},
                     ttl=60,
                 )
                 return True
         return False
 
-    async def activate(self, user_id: UUID, reason: str) -> EmergencyStop:
-        """Activate emergency stop for user."""
+    async def activate(self, owner_id: UUID, reason: str, actor_id: UUID) -> Optional[EmergencyStop]:
         async with get_db_session() as session:
-            # Check if already active
             existing = await session.execute(
-                select(EmergencyStop).where(EmergencyStop.user_id == user_id)
+                select(EmergencyStop).where(EmergencyStop.owner_id == owner_id)
             )
             emergency_stop = existing.scalar_one_or_none()
 
             if emergency_stop:
                 if emergency_stop.active:
+                    await session.commit()
                     return emergency_stop
                 emergency_stop.active = True
                 emergency_stop.reason = reason
                 emergency_stop.activated_at = datetime.now(timezone.utc)
+                emergency_stop.activated_by = actor_id
                 emergency_stop.released_at = None
                 emergency_stop.released_by = None
             else:
                 emergency_stop = EmergencyStop(
-                    user_id=user_id,
+                    owner_id=owner_id,
                     active=True,
                     reason=reason,
                     activated_at=datetime.now(timezone.utc),
+                    activated_by=actor_id,
                 )
                 session.add(emergency_stop)
+
+            await session.flush()
+
+            audit = AuditService()
+            await audit.create_audit_log(
+                category=AuditCategory.EMERGENCY_STOP,
+                action=AuditAction.EMERGENCY_STOP_ACTIVATED,
+                result="success",
+                user_id=actor_id,
+                metadata={"reason": reason, "owner_id": str(owner_id)},
+            )
 
             await session.commit()
             await session.refresh(emergency_stop)
 
-            # Update cache
             await valkey_client.set(
-                f"emergency_stop:{user_id}",
-                {"active": True, "activated_at": emergency_stop.activated_at.isoformat()},
-                ttl=3600,  # 1 hour
+                f"emergency_stop:{owner_id}",
+                {"active": True, "activated_at": emergency_stop.activated_at.isoformat() if emergency_stop.activated_at else None},
+                ttl=3600,
             )
 
-            # Publish event to NATS
-            await self._publish_emergency_stop_event(user_id, True, reason)
+            await nats_client.publish_js(
+                subjects.emergency_stop(str(owner_id)),
+                {
+                    "owner_id": str(owner_id),
+                    "active": True,
+                    "reason": reason,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                },
+                message_id=f"estop-{owner_id}-{datetime.now(timezone.utc).timestamp()}",
+            )
 
             return emergency_stop
 
-    async def release(self, user_id: UUID, released_by: UUID) -> Optional[EmergencyStop]:
-        """Release emergency stop for user."""
+    async def release(self, owner_id: UUID, released_by: UUID) -> Optional[EmergencyStop]:
         async with get_db_session() as session:
             result = await session.execute(
-                select(EmergencyStop).where(EmergencyStop.user_id == user_id)
+                select(EmergencyStop).where(EmergencyStop.owner_id == owner_id)
             )
             emergency_stop = result.scalar_one_or_none()
 
@@ -93,38 +112,37 @@ class EmergencyStopService:
             emergency_stop.released_at = datetime.now(timezone.utc)
             emergency_stop.released_by = released_by
 
+            await session.flush()
+
+            audit = AuditService()
+            await audit.create_audit_log(
+                category=AuditCategory.EMERGENCY_STOP,
+                action=AuditAction.EMERGENCY_STOP_RELEASED,
+                result="success",
+                user_id=released_by,
+                metadata={"owner_id": str(owner_id)},
+            )
+
             await session.commit()
             await session.refresh(emergency_stop)
 
-            # Update cache
-            await valkey_client.delete(f"emergency_stop:{user_id}")
+            await valkey_client.delete(f"emergency_stop:{owner_id}")
 
-            # Publish event
-            await self._publish_emergency_stop_event(user_id, False, "Emergency stop released")
+            await nats_client.publish_js(
+                subjects.emergency_resume(str(owner_id)),
+                {
+                    "owner_id": str(owner_id),
+                    "active": False,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                },
+                message_id=f"eresume-{owner_id}-{datetime.now(timezone.utc).timestamp()}",
+            )
 
             return emergency_stop
 
-    async def get_status(self, user_id: UUID) -> Optional[EmergencyStop]:
-        """Get emergency stop status."""
+    async def get_status(self, owner_id: UUID) -> Optional[EmergencyStop]:
         async with get_db_session() as session:
             result = await session.execute(
-                select(EmergencyStop).where(EmergencyStop.user_id == user_id)
+                select(EmergencyStop).where(EmergencyStop.owner_id == owner_id)
             )
             return result.scalar_one_or_none()
-
-    async def _publish_emergency_stop_event(self, user_id: UUID, active: bool, reason: str):
-        """Publish emergency stop event to NATS."""
-        import json
-
-        payload = {
-            "user_id": str(user_id),
-            "active": active,
-            "reason": reason,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
-
-        await nats_client.publish(
-            "veyaan.system.emergency_stop",
-            json.dumps(payload).encode(),
-            headers={"user_id": str(user_id)},
-        )

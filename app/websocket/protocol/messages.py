@@ -8,7 +8,6 @@ from pydantic import BaseModel
 class HelloMessage(BaseModel):
     type: Literal["hello"]
     device_id: UUID
-    credential_proof: str
     protocol_version: str
     app_version: str
 

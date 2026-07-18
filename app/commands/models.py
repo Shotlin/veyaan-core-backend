@@ -12,6 +12,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship
 
@@ -55,16 +56,16 @@ class TaskState(str, Enum):
     CANCELLED = "cancelled"
 
 
-# SQLAlchemy Models
 class Command(Base):
     __tablename__ = "commands"
 
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     device_id = Column(PG_UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
     command_type = Column(String(100), nullable=False, index=True)
-    parameters = Column(Text, nullable=False, default="{}")
+    parameters = Column(JSONB, nullable=False, default=dict)
     risk_level = Column(String(20), nullable=False, default=RiskLevel.LOW)
     idempotency_key = Column(String(255), nullable=False, index=True)
+    request_fingerprint = Column(String(64), nullable=True)
     state = Column(String(50), nullable=False, default=CommandState.RECEIVED.value, index=True)
     requires_approval = Column(Boolean, nullable=False, default=False)
     delayed_execution_allowed = Column(Boolean, nullable=False, default=False)
@@ -73,6 +74,7 @@ class Command(Base):
     acknowledged_at = Column(DateTime(timezone=True), nullable=True)
     started_at = Column(DateTime(timezone=True), nullable=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)
+    result_data = Column(JSONB, nullable=True)
     result_summary = Column(Text, nullable=True)
     error_code = Column(String(50), nullable=True)
     error_message = Column(Text, nullable=True)
@@ -111,8 +113,9 @@ class CommandStateEvent(Base):
     command_id = Column(PG_UUID(as_uuid=True), ForeignKey("commands.id", ondelete="CASCADE"), nullable=False, index=True)
     previous_state = Column(String(50), nullable=True)
     new_state = Column(String(50), nullable=False)
-    event_source = Column(String(50), nullable=False)  # api, gateway, scheduler, device
-    event_metadata = Column(Text, nullable=True)
+    event_source = Column(String(50), nullable=False)
+    event_metadata = Column(JSONB, nullable=True)
+    deduplication_key = Column(String(64), nullable=True, unique=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     command = relationship("Command", back_populates="state_events")

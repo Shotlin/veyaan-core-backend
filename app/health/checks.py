@@ -2,7 +2,7 @@ from typing import Any
 
 from sqlalchemy import text
 
-from app.cache.client import valkey_client
+from app.cache import valkey_client
 from app.database.connection import engine
 from app.events.nats_client import nats_client
 

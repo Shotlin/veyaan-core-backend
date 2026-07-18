@@ -4,7 +4,7 @@ from uuid import UUID
 
 from app.audit.models import AuditAction, AuditCategory
 from app.audit.repository import AuditRepository
-from app.database.session import get_db_session
+from app.database.session import get_db_session_context as get_db_session
 
 
 class AuditService:
@@ -29,14 +29,14 @@ class AuditService:
         async with get_db_session() as session:
             repo = AuditRepository(session)
             await repo.create_audit_log(
-                category=category,
-                action=action,
+                category=category.value if isinstance(category, AuditCategory) else category,
+                action=action.value if isinstance(action, AuditAction) else action,
                 result=result,
                 user_id=user_id,
                 device_id=device_id,
                 command_id=command_id,
                 approval_id=approval_id,
-                metadata=str(metadata) if metadata else None,
+                metadata=metadata,
                 request_id=request_id,
                 trace_id=trace_id,
                 ip_address=ip_address,

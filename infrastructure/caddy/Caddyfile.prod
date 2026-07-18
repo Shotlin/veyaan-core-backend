@@ -1,0 +1,42 @@
+{
+    admin off
+    auto_https disable_redirects
+    servers {
+        trusted_proxies private_ranges
+    }
+}
+
+:80 {
+    redir https://{host}{uri} 301
+}
+
+api.veyaan.local {
+    request_body max_size 10MB
+
+    reverse_proxy api:8000 {
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-For {remote_host}
+    }
+
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+}
+
+ws.veyaan.local {
+    reverse_proxy gateway:8001 {
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-For {remote_host}
+    }
+}
+
+monitoring.veyaan.local {
+    basicauth {
+        operator $2a$14$xxxxxxxxxxxxxxxxxxxxxx
+    }
+    reverse_proxy monitoring:9090
+}

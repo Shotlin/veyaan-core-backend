@@ -1,4 +1,3 @@
-
 from typing import Optional
 
 from fastapi import Depends
@@ -6,11 +5,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.errors import ApiError, ErrorCode
-from app.auth.models import TokenClaims
 from app.auth.supabase import supabase_auth
+from app.auth.user_context import UserContext
 from app.database.session import get_db_session
-from app.users.models import User
-from app.users.service import UserService
+from app.users.repository import UserRepository
 
 security = HTTPBearer(auto_error=False)
 
@@ -21,28 +19,42 @@ async def get_current_token(credentials: HTTPAuthorizationCredentials = Depends(
     return credentials.credentials
 
 
-async def get_token_claims(token: str = Depends(get_current_token)) -> TokenClaims:
-    return await supabase_auth.verify_token(token)
+async def get_current_user_context(
+    token: str = Depends(get_current_token),
+    session: AsyncSession = Depends(get_db_session),
+) -> UserContext:
+    claims = await supabase_auth.verify_token(token)
+    repo = UserRepository(session)
+    user = await repo.get_by_supabase_id(claims.sub)
+    if not user:
+        user = await repo.create(claims.sub, claims.email)
+    if user.status == "suspended":
+        raise ApiError(ErrorCode.FORBIDDEN, "Account suspended", status_code=403)
+    return UserContext(
+        id=user.id,
+        supabase_user_id=user.supabase_user_id,
+        email=user.email,
+        status=user.status.value if hasattr(user.status, 'value') else str(user.status),
+    )
 
 
-async def get_current_user(
-    claims: TokenClaims = Depends(get_token_claims),
-    session: AsyncSession = Depends(get_db_session)
-) -> User:
-    user_service = UserService()
-    user = await user_service.get_or_create_user(claims)
-    return user
-
-
-async def get_optional_user(
+async def get_optional_user_context(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    session: AsyncSession = Depends(get_db_session)
-) -> Optional[User]:
+    session: AsyncSession = Depends(get_db_session),
+) -> Optional[UserContext]:
     if not credentials:
         return None
     try:
         claims = await supabase_auth.verify_token(credentials.credentials)
-        user_service = UserService()
-        return await user_service.get_or_create_user(claims)
+        repo = UserRepository(session)
+        user = await repo.get_by_supabase_id(claims.sub)
+        if not user:
+            user = await repo.create(claims.sub, claims.email)
+        return UserContext(
+            id=user.id,
+            supabase_user_id=user.supabase_user_id,
+            email=user.email,
+            status=user.status.value if hasattr(user.status, 'value') else str(user.status),
+        )
     except ApiError:
         return None

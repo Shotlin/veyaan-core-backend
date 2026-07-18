@@ -6,7 +6,6 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "443:443/udp"
     volumes:
       - ./infrastructure/caddy/Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
@@ -23,7 +22,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     environment:
       - ENVIRONMENT=development
     env_file:
@@ -39,6 +38,8 @@ services:
         condition: service_healthy
     networks:
       - veyaan-network
+    ports:
+      - "8000:8000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
       interval: 30s
@@ -63,15 +64,80 @@ services:
         condition: service_healthy
     networks:
       - veyaan-network
+    ports:
+      - "8001:8001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health/live"]
       interval: 30s
       timeout: 10s
       retries: 3
 
+  outbox-publisher:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    command: python -m app.workers.outbox_publisher
+    environment:
+      - ENVIRONMENT=development
+    env_file:
+      - .env
+    volumes:
+      - ./app:/app/app
+    depends_on:
+      neon:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    networks:
+      - veyaan-network
+
+  command-consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    command: python -m app.workers.command_consumer
+    environment:
+      - ENVIRONMENT=development
+    env_file:
+      - .env
+    volumes:
+      - ./app:/app/app
+    depends_on:
+      neon:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    networks:
+      - veyaan-network
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    command: python -m app.workers.scheduler
+    environment:
+      - ENVIRONMENT=development
+    env_file:
+      - .env
+    volumes:
+      - ./app:/app/app
+    depends_on:
+      neon:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    networks:
+      - veyaan-network
+
   nats:
     image: nats:2.10-alpine
-    command: ["-js", "-m", "8222"]
+    command: ["-js", "-m", "8222", "-c", "/etc/nats/jetstream.conf"]
     ports:
       - "4222:4222"
       - "8222:8222"
@@ -110,7 +176,6 @@ services:
       - "5432:5432"
     volumes:
       - neon_data:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d
     networks:
       - veyaan-network
     healthcheck:
@@ -118,27 +183,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
-    command: python -m app.workers.main
-    environment:
-      - ENVIRONMENT=development
-    env_file:
-      - .env
-    volumes:
-      - ./app:/app/app
-    depends_on:
-      neon:
-        condition: service_healthy
-      nats:
-        condition: service_healthy
-      valkey:
-        condition: service_healthy
-    networks:
-      - veyaan-network
 
   monitoring:
     image: prom/prometheus:latest

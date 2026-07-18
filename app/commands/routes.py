@@ -3,16 +3,16 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.dependencies import get_current_user
+from app.api.dependencies import get_current_user_context
 from app.api.responses import ApiResponse, PaginatedResponse
+from app.auth.user_context import UserContext
 from app.commands.schemas import (
     CommandResponse,
     CreateCommandRequest,
     CreateCommandResponse,
     TaskResponse,
 )
-from app.commands.service import CommandService
-from app.users.models import User
+from app.commands.service import CommandService, TaskService
 
 router = APIRouter(prefix="/commands", tags=["commands"])
 
@@ -24,7 +24,7 @@ async def get_command_service() -> CommandService:
 @router.post("", response_model=ApiResponse[CreateCommandResponse], status_code=status.HTTP_201_CREATED)
 async def create_command(
     request: CreateCommandRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: UserContext = Depends(get_current_user_context),
     service: CommandService = Depends(get_command_service),
 ):
     result = await service.create_command(request, current_user.id)
@@ -34,18 +34,14 @@ async def create_command(
 @router.get("/{command_id}", response_model=ApiResponse[CommandResponse])
 async def get_command(
     command_id: UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: UserContext = Depends(get_current_user_context),
     service: CommandService = Depends(get_command_service),
 ):
-    command = await service.get_command(command_id)
-    if not command:
-        from app.api.errors import ApiError, ErrorCode
-        raise ApiError(ErrorCode.COMMAND_NOT_FOUND, "Command not found", status_code=404)
+    from app.api.errors import ApiError, ErrorCode
 
-    # Verify ownership
-    if str(command.device.owner_id) != str(current_user.id):
-        from app.api.errors import ApiError, ErrorCode
-        raise ApiError(ErrorCode.FORBIDDEN, "Not authorized", status_code=403)
+    command = await service.get_command(command_id)
+    if not command or str(command.device.owner_id) != str(current_user.id):
+        raise ApiError(ErrorCode.COMMAND_NOT_FOUND, "Command not found", status_code=404)
 
     return ApiResponse(data=CommandResponse.model_validate(command))
 
@@ -60,7 +56,7 @@ async def list_commands(
     end_date: datetime = Query(None, description="Filter by end date"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    current_user: User = Depends(get_current_user),
+    current_user: UserContext = Depends(get_current_user_context),
     service: CommandService = Depends(get_command_service),
 ):
     commands, total = await service.list_commands(
@@ -89,12 +85,13 @@ async def list_commands(
 @router.post("/{command_id}/cancel", response_model=ApiResponse[dict])
 async def cancel_command(
     command_id: UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: UserContext = Depends(get_current_user_context),
     service: CommandService = Depends(get_command_service),
 ):
+    from app.api.errors import ApiError, ErrorCode
+
     success = await service.cancel_command(command_id, current_user.id)
     if not success:
-        from app.api.errors import ApiError, ErrorCode
         raise ApiError(ErrorCode.COMMAND_NOT_FOUND, "Command not found or cannot be cancelled", status_code=404)
     return ApiResponse(data={"cancelled": True})
 
@@ -102,23 +99,27 @@ async def cancel_command(
 @router.get("/{command_id}/events", response_model=ApiResponse[list])
 async def get_command_events(
     command_id: UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: UserContext = Depends(get_current_user_context),
     service: CommandService = Depends(get_command_service),
 ):
-    events = await service.get_state_events(command_id)
+    events = await service.get_state_events(command_id, current_user.id)
     return ApiResponse(data=events)
 
 
 @router.get("/{command_id}/task", response_model=ApiResponse[TaskResponse])
 async def get_task(
     command_id: UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: UserContext = Depends(get_current_user_context),
     service: CommandService = Depends(get_command_service),
 ):
-    from app.commands.service import TaskService
+    from app.api.errors import ApiError, ErrorCode
+
+    command = await service.get_command(command_id)
+    if not command or str(command.device.owner_id) != str(current_user.id):
+        raise ApiError(ErrorCode.NOT_FOUND, "Task not found", status_code=404)
+
     task_service = TaskService()
     task = await task_service.get_task_by_command(command_id)
     if not task:
-        from app.api.errors import ApiError, ErrorCode
         raise ApiError(ErrorCode.NOT_FOUND, "Task not found", status_code=404)
     return ApiResponse(data=TaskResponse.model_validate(task))

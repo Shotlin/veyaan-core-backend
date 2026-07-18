@@ -1,17 +1,14 @@
-"""Outbox repository for managing outbox events."""
-
 from datetime import datetime, timezone
-from typing import Optional, list
 from uuid import UUID
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.events.outbox import OutboxEvent, OutboxEventStatus
+from app.events.outbox_models import OutboxEvent, OutboxEventStatus
 
 
 class OutboxRepository:
-    def __init__(self, session):
+    def __init__(self, session: AsyncSession):
         self.session = session
 
     async def add_event(
@@ -23,14 +20,13 @@ class OutboxRepository:
         payload: dict,
         headers: dict = None,
     ):
-        """Add a new outbox event."""
         event = OutboxEvent(
             event_type=event_type,
             aggregate_type=aggregate_type,
             aggregate_id=aggregate_id,
             subject=subject,
             payload=payload,
-            headers=headers,
+            headers=headers or {},
             status=OutboxEventStatus.PENDING,
             available_at=datetime.now(timezone.utc),
         )
@@ -39,9 +35,7 @@ class OutboxRepository:
         await self.session.refresh(event)
         return event
 
-    async def get_unpublished(self, limit: int = 100) -> list:
-        """Get unpublished outbox events."""
-        from app.events.outbox import OutboxEventStatus
+    async def get_unpublished(self, limit: int = 100):
         result = await self.session.execute(
             select(OutboxEvent)
             .where(OutboxEvent.status == OutboxEventStatus.PENDING)
@@ -53,25 +47,33 @@ class OutboxRepository:
         return list(result.scalars().all())
 
     async def mark_published(self, event_id: UUID):
-        """Mark an outbox event as published."""
         result = await self.session.execute(
             update(OutboxEvent)
             .where(OutboxEvent.id == event_id)
             .values(
-                status="published",
+                status=OutboxEventStatus.PUBLISHED,
                 published_at=datetime.now(timezone.utc),
             )
         )
         return result.rowcount > 0
 
+    async def mark_failed(self, event_id: UUID, error: str):
+        await self.session.execute(
+            update(OutboxEvent)
+            .where(OutboxEvent.id == event_id)
+            .values(
+                status=OutboxEventStatus.FAILED,
+                last_error=str(error)[:1000],
+            )
+        )
+
     async def increment_attempt(self, event_id: UUID, error: str):
-        """Increment attempt count and store error."""
         await self.session.execute(
             update(OutboxEvent)
             .where(OutboxEvent.id == event_id)
             .values(
                 attempt_count=OutboxEvent.attempt_count + 1,
                 last_error=str(error)[:1000],
-                status="pending",
+                status=OutboxEventStatus.PENDING,
             )
         )

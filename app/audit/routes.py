@@ -4,11 +4,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.dependencies import get_current_user
+from app.api.dependencies import get_current_user_context
 from app.api.responses import ApiResponse
 from app.audit.schemas import AuditLogResponse, PaginatedResponse
 from app.audit.service import AuditService
-from app.users.models import User
+from app.auth.user_context import UserContext
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
@@ -28,8 +28,8 @@ async def list_audit_logs(
     end_date: Optional[datetime] = Query(None, description="Filter by end date"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    current_user: User = Depends(get_current_user),
-    service: AuditService = Depends(AuditService),
+    current_user: UserContext = Depends(get_current_user_context),
+    service: AuditService = Depends(get_audit_service),
 ):
     items, total, has_next, has_prev = await service.query_audit_logs(
         user_id=current_user.id,

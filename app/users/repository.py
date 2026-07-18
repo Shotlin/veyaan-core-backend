@@ -26,12 +26,12 @@ class UserRepository:
     async def create(
         self,
         supabase_user_id: str,
-        display_name: str,
-        email: str
+        email: str,
+        display_name: str = "",
     ) -> User:
         user = User(
             supabase_user_id=supabase_user_id,
-            display_name=display_name,
+            display_name=display_name or email.split("@")[0],
             email=email,
             status=UserStatus.ACTIVE
         )

@@ -1,0 +1,146 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      - ENVIRONMENT=development
+    env_file:
+      - ../../.env
+    volumes:
+      - ../../app:/app/app
+    depends_on:
+      neon:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    networks:
+      - veyaan-network
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  gateway:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.gateway
+    command: python -m app.websocket.gateway
+    environment:
+      - ENVIRONMENT=development
+    env_file:
+      - ../../.env
+    volumes:
+      - ../../app:/app/app
+    depends_on:
+      nats:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    networks:
+      - veyaan-network
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.worker
+    command: python -m app.workers.scheduler
+    environment:
+      - ENVIRONMENT=development
+    env_file:
+      - ../../.env
+    volumes:
+      - ../../app:/app/app
+    depends_on:
+      neon:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    networks:
+      - veyaan-network
+
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js", "-m", "8222", "-c", "/etc/nats/jetstream.conf"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats_data:/data
+      - ../../infrastructure/nats/jetstream.conf:/etc/nats/jetstream.conf
+    networks:
+      - veyaan-network
+    healthcheck:
+      test: ["CMD", "nats", "server", "check", "jetstream"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - valkey_data:/data
+    networks:
+      - veyaan-network
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  neon:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: veyaan_dev
+      POSTGRES_USER: veyaan
+      POSTGRES_PASSWORD: dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - neon_data:/var/lib/postgresql/data
+    networks:
+      - veyaan-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U veyaan -d veyaan_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  monitoring:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../../infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - veyaan-network
+
+networks:
+  veyaan-network:
+    driver: bridge
+
+volumes:
+  nats_data:
+  valkey_data:
+  neon_data:
+  prometheus_data:

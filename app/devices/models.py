@@ -3,7 +3,7 @@ import hashlib
 import secrets
 from uuid import uuid4
 
-from sqlalchemy import Column, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -48,6 +48,7 @@ class PairingRequest(Base):
     protocol_version = Column(String(20), nullable=False, default="v1")
     device_public_identity = Column(Text, nullable=False)
     pairing_code_hash = Column(String(64), nullable=False)
+    attempt_count = Column(Integer, nullable=False, default=0)
     owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     status = Column(SQLEnum(PairingStatus, create_constraint=False, native_enum=False), default=PairingStatus.PENDING, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)

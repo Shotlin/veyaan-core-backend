@@ -1,0 +1,228 @@
+version: '3.8'
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ../../infrastructure/caddy/Caddyfile.prod:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - veyaan-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+    environment:
+      - ENVIRONMENT=production
+    env_file:
+      - ../../.env.production
+    depends_on:
+      neon:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    networks:
+      - veyaan-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    security_opt:
+      - no-new-privileges:true
+
+  gateway:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.gateway
+    command: python -m app.websocket.gateway
+    environment:
+      - ENVIRONMENT=production
+    env_file:
+      - ../../.env.production
+    depends_on:
+      nats:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    networks:
+      - veyaan-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    security_opt:
+      - no-new-privileges:true
+
+  outbox-publisher:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.worker
+    command: python -m app.workers.outbox_publisher
+    environment:
+      - ENVIRONMENT=production
+    env_file:
+      - ../../.env.production
+    depends_on:
+      neon:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    networks:
+      - veyaan-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+
+  command-consumer:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.worker
+    command: python -m app.workers.command_consumer
+    environment:
+      - ENVIRONMENT=production
+    env_file:
+      - ../../.env.production
+    depends_on:
+      neon:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    networks:
+      - veyaan-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+
+  scheduler:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.worker
+    command: python -m app.workers.scheduler
+    environment:
+      - ENVIRONMENT=production
+    env_file:
+      - ../../.env.production
+    depends_on:
+      neon:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    networks:
+      - veyaan-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js", "-m", "8222", "-c", "/etc/nats/jetstream.conf"]
+    volumes:
+      - nats_data:/data
+      - ../../infrastructure/nats/jetstream.conf:/etc/nats/jetstream.conf
+    networks:
+      - veyaan-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "nats", "server", "check", "jetstream"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    command: ["valkey-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - valkey_data:/data
+    networks:
+      - veyaan-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  monitoring:
+    image: prom/prometheus:latest
+    volumes:
+      - ../../infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - veyaan-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 256M
+
+networks:
+  veyaan-network:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
+  nats_data:
+  valkey_data:
+  prometheus_data:

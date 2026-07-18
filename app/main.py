@@ -7,6 +7,7 @@ from prometheus_client import make_asgi_app
 from app.api.middleware.error_handling import ErrorHandlingMiddleware
 from app.api.middleware.request_id import RequestIdMiddleware
 from app.api.middleware.tracing import TracingMiddleware
+from app.approvals.routes import router as approvals_router
 from app.audit.routes import router as audit_router
 from app.auth.routes import router as auth_router
 from app.cache import valkey_client
@@ -24,7 +25,6 @@ from app.users.routes import router as users_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     logger.info("starting_up", service_version=settings.SERVICE_VERSION)
 
     await init_db()
@@ -35,7 +35,6 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown
     logger.info("shutting_down")
 
     await nats_client.disconnect()
@@ -53,7 +52,6 @@ app = FastAPI(
     redoc_url="/redoc" if settings.ENVIRONMENT == "development" else None,
 )
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
@@ -62,13 +60,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Middleware (order matters - outermost first)
 app.add_middleware(ErrorHandlingMiddleware)
 app.add_middleware(TracingMiddleware)
 app.add_middleware(RequestIdMiddleware)
 app.add_middleware(RateLimitMiddleware)
 
-# Prometheus metrics endpoint
 metrics_app = make_asgi_app()
 app.mount("/metrics", metrics_app)
 
@@ -79,6 +75,7 @@ app.include_router(users_router, prefix="/v1")
 app.include_router(devices_router, prefix="/v1")
 app.include_router(commands_router, prefix="/v1")
 app.include_router(emergency_stop_router, prefix="/v1")
+app.include_router(approvals_router, prefix="/v1")
 app.include_router(audit_router, prefix="/v1")
 
 

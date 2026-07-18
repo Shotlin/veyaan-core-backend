@@ -20,12 +20,3 @@ ws.veyaan.local {
         header_up X-Forwarded-For {remote_host}
     }
 }
-
-monitoring.veyaan.local {
-    reverse_proxy monitoring:9090
-}
-
-# Health endpoint accessible without auth
-localhost:8080 {
-    respond "OK" 200
-}

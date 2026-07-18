@@ -1,12 +1,11 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query
 
-from app.api.dependencies import get_current_user
+from app.api.dependencies import get_current_user_context
 from app.api.responses import ApiResponse
 from app.approvals.schemas import (
-    ApprovalCreateRequest,
     ApprovalDecisionRequest,
     ApprovalDecisionResponse,
     ApprovalResponse,
@@ -14,29 +13,13 @@ from app.approvals.schemas import (
     PaginatedResponse,
 )
 from app.approvals.service import ApprovalService
-from app.users.models import User
+from app.auth.user_context import UserContext
 
-router = APIRouter(prefix="/v1/approvals", tags=["approvals"])
+router = APIRouter(prefix="/approvals", tags=["approvals"])
 
 
 async def get_approval_service() -> ApprovalService:
     return ApprovalService()
-
-
-@router.post("", response_model=ApiResponse[ApprovalDecisionResponse], status_code=status.HTTP_201_CREATED)
-async def create_approval(
-    request: ApprovalCreateRequest,
-    current_user: User = Depends(get_current_user),
-    service: ApprovalService = Depends(get_approval_service),
-):
-    response, nonce = await service.create_approval(request, current_user.id)
-    # Include nonce in response for client to use when deciding
-    return ApiResponse(data={
-        "approval_id": response.approval_id,
-        "status": response.status,
-        "decided_at": response.decided_at,
-        "decision_nonce": nonce,  # Only returned once!
-    })
 
 
 @router.get("", response_model=ApiResponse[PaginatedResponse[ApprovalResponse]])
@@ -45,7 +28,7 @@ async def list_approvals(
     risk_level: Optional[str] = Query(None, description="Filter by risk level"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    current_user: User = Depends(get_current_user),
+    current_user: UserContext = Depends(get_current_user_context),
     service: ApprovalService = Depends(get_approval_service),
 ):
     approvals, total = await service.list_approvals(
@@ -71,12 +54,13 @@ async def list_approvals(
 @router.get("/{approval_id}", response_model=ApiResponse[ApprovalResponse])
 async def get_approval(
     approval_id: UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: UserContext = Depends(get_current_user_context),
     service: ApprovalService = Depends(get_approval_service),
 ):
+    from app.api.errors import ApiError, ErrorCode
+
     approval = await service.get_approval(approval_id)
-    if not approval or approval.owner_id != current_user.id:
-        from app.api.errors import ApiError, ErrorCode
+    if not approval or str(approval.owner_id) != str(current_user.id):
         raise ApiError(ErrorCode.NOT_FOUND, "Approval not found", status_code=404)
     return ApiResponse(data=ApprovalResponse.model_validate(approval))
 
@@ -85,9 +69,11 @@ async def get_approval(
 async def approve(
     approval_id: UUID,
     request: ApprovalDecisionRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: UserContext = Depends(get_current_user_context),
     service: ApprovalService = Depends(get_approval_service),
 ):
+    from app.api.errors import ApiError, ErrorCode
+
     response = await service.decide_approval(
         approval_id=approval_id,
         owner_id=current_user.id,
@@ -95,6 +81,8 @@ async def approve(
         nonce=request.nonce,
         note=request.note,
     )
+    if not response:
+        raise ApiError(ErrorCode.APPROVAL_NOT_FOUND, "Approval not found or cannot be decided", status_code=404)
     return ApiResponse(data=response)
 
 
@@ -102,9 +90,11 @@ async def approve(
 async def reject(
     approval_id: UUID,
     request: ApprovalDecisionRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: UserContext = Depends(get_current_user_context),
     service: ApprovalService = Depends(get_approval_service),
 ):
+    from app.api.errors import ApiError, ErrorCode
+
     response = await service.decide_approval(
         approval_id=approval_id,
         owner_id=current_user.id,
@@ -112,4 +102,6 @@ async def reject(
         nonce=request.nonce,
         note=request.note,
     )
+    if not response:
+        raise ApiError(ErrorCode.APPROVAL_NOT_FOUND, "Approval not found or cannot be decided", status_code=404)
     return ApiResponse(data=response)
