@@ -46,10 +46,10 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@f67e2a3f3bd08c3d6a7b1465243a1390377fc585 # v5.1.0
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -65,7 +65,6 @@ jobs:
         run: ruff format --check .
 
       - name: Run MyPy
-        # GAP-P1-4: removed '|| true' — MyPy must fail the build
         run: mypy app/
 
       - name: Run tests
@@ -74,7 +73,6 @@ jobs:
           NATS_URL: nats://localhost:4222
           VALKEY_URL: redis://localhost:6379
           ENVIRONMENT: test
-        # GAP-P1-5: coverage threshold raised from 30% to 70%
         run: pytest tests/ -v --tb=short --cov=app --cov-report=term --cov-report=xml --cov-fail-under=70
 
       - name: Build ARM64 API image
@@ -92,12 +90,12 @@ jobs:
   security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
         with:
           fetch-depth: 0
 
       - name: Run TruffleHog secret scan
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@0b23027b40742f36bc932ee59620d44087e6fa50 # v3.81.0
         with:
           path: ./
           base: main
@@ -105,7 +103,7 @@ jobs:
           extra_args: --fail --no-verification
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@f67e2a3f3bd08c3d6a7b1465243a1390377fc585 # v5.1.0
         with:
           python-version: '3.12'
 
@@ -113,7 +111,6 @@ jobs:
         run: pip install bandit pip-audit
 
       - name: Run Bandit SAST
-        # GAP-P1-5: Fails on HIGH findings (not suppressed)
         run: |
           bandit -r app/ -f json -o bandit-report.json -ll
           if grep -q '"issue_severity": "HIGH"' bandit-report.json; then
@@ -124,18 +121,17 @@ jobs:
           echo "Bandit scan complete — no HIGH severity issues"
 
       - name: Run dependency audit
-        # GAP-P1-5: Fails on known vulnerabilities (not suppressed with || true)
         run: pip-audit --requirement requirements.txt
 
       - name: Trivy image scan — API
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@6e0b7415d8629cc043b4f6b6eb7a8ca184e622b3 # v0.24.0
         with:
           image-ref: 'veyaan-api:test'
           format: 'table'
           exit-code: '1'
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
-        continue-on-error: true  # Images built in separate job; scan for reporting
+        continue-on-error: true
 
   migration-check:
     runs-on: ubuntu-latest
@@ -156,10 +152,10 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@f67e2a3f3bd08c3d6a7b1465243a1390377fc585 # v5.1.0
         with:
           python-version: '3.12'
           cache: 'pip'

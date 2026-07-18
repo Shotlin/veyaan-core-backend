@@ -2,7 +2,7 @@
 
 Core backend infrastructure for VEYAAN Project 1 — secure device command pipeline.
 
-> **Status**: Active Development — spec-compliant implementation in progress.  
+> **Status**: VEYAAN Project 1 core backend release candidate has passed the documented architecture, functional, security, recovery, and ARM64 deployment gates.  
 > See [`docs/reports/baseline_report.md`](docs/reports/baseline_report.md) for the full audit and compliance checklist.
 
 ## Technology Stack

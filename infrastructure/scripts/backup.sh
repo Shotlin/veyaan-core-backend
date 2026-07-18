@@ -9,7 +9,7 @@ R2_BUCKET="${R2_BUCKET:-veyaan-backups}"
 AGE_RECIPIENT_FILE="${AGE_RECIPIENT_FILE:-/etc/veyaan/age_recipient}"
 RCLONE_CONFIG="${RCLONE_CONFIG:-/opt/veyaan/.rclone.conf}"
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
-DRY_RUN="${DRY_RUN:-false}"
+DRY_RUN="${DRY_RUN:-true}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -76,16 +76,22 @@ rm -rf "$BACKUP_DIR"
 
 log_info "Applying retention policy ($RETENTION_DAYS days)..."
 if [[ "$DRY_RUN" == "true" ]]; then
-    log_info "DRY RUN: would delete backups older than $RETENTION_DAYS days"
+    log_info "DRY RUN: would delete backups older than $RETENTION_DAYS days:"
+    rclone lsf "r2:$R2_BUCKET/backups/" \
+        --config "$RCLONE_CONFIG" \
+        --min-age "${RETENTION_DAYS}d" --recursive | while read -r file; do
+        log_info "DRY RUN: would delete: $file"
+    done
+else
+    log_info "Deleting backups older than $RETENTION_DAYS days:"
+    rclone lsf "r2:$R2_BUCKET/backups/" \
+        --config "$RCLONE_CONFIG" \
+        --min-age "${RETENTION_DAYS}d" --recursive | while read -r file; do
+        log_info "Deleting backup object: $file"
+    done
     rclone delete "r2:$R2_BUCKET/backups/" \
         --config "$RCLONE_CONFIG" \
-        --min-age "${RETENTION_DAYS}d" \
-        --dry-run
-else
-    log_info "Deleting backups older than $RETENTION_DAYS days"
-    deleted=$(rclone delete "r2:$R2_BUCKET/backups/" \
-        --config "$RCLONE_CONFIG" \
-        --min-age "${RETENTION_DAYS}d" 2>&1)
+        --min-age "${RETENTION_DAYS}d"
     log_info "Retention cleanup completed"
 fi
 

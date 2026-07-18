@@ -52,12 +52,6 @@ log_info "Starting restore from $BACKUP_PATH"
 log_info "Downloading backup..."
 rclone copy "$BACKUP_PATH" "$RESTORE_DIR" --config "$RCLONE_CONFIG" --progress
 
-if [[ -f "$RESTORE_DIR/neon_dump.sql.gz.sha256" ]]; then
-    log_info "Verifying checksum..."
-    (cd "$RESTORE_DIR" && sha256sum -c "neon_dump.sql.gz.sha256")
-    log_info "Checksum verified"
-fi
-
 if [[ ! -f "$RESTORE_DIR/neon_dump.sql.gz.age" ]]; then
     log_error "Encrypted backup not found"
     exit 1
@@ -65,6 +59,12 @@ fi
 
 log_info "Decrypting backup..."
 age -d -i "$AGE_IDENTITY_FILE" -o "$RESTORE_DIR/neon_dump.sql.gz" "$RESTORE_DIR/neon_dump.sql.gz.age"
+
+if [[ -f "$RESTORE_DIR/neon_dump.sql.gz.sha256" ]]; then
+    log_info "Verifying checksum..."
+    (cd "$RESTORE_DIR" && sha256sum -c "neon_dump.sql.gz.sha256")
+    log_info "Checksum verified"
+fi
 
 log_info "Restoring database..."
 gunzip -c "$RESTORE_DIR/neon_dump.sql.gz" | psql "$DATABASE_URL" -v ON_ERROR_STOP=1

@@ -4,6 +4,15 @@
     servers {
         trusted_proxies private_ranges
     }
+    log {
+        output stdout
+        format json {
+            filter {
+                request>headers>Authorization replace "REDACTED"
+                request>headers>Cookie replace "REDACTED"
+            }
+        }
+    }
 }
 
 :80 {
