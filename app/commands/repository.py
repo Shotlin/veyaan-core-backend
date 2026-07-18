@@ -96,7 +96,8 @@ class CommandRepository:
 
     async def list_commands(
         self,
-        device_id: Optional[UUID] = None,
+        owner_id: UUID = None,
+        device_id: UUID = None,
         state: Optional[CommandState] = None,
         risk_level: Optional[str] = None,
         command_type: Optional[str] = None,
@@ -107,6 +108,8 @@ class CommandRepository:
     ) -> tuple[list[Command], int]:
         query = select(Command).options(selectinload(Command.task))
 
+        if owner_id:
+            query = query.join(Device, Command.device_id == Device.id).where(Device.owner_id == owner_id)
         if device_id:
             query = query.where(Command.device_id == device_id)
         if state:
@@ -124,6 +127,8 @@ class CommandRepository:
 
         # Count total
         count_query = select(Command.id)
+        if owner_id:
+            count_query = count_query.join(Device, Command.device_id == Device.id).where(Device.owner_id == owner_id)
         if device_id:
             count_query = count_query.where(Command.device_id == device_id)
         if state:

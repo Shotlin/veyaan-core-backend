@@ -3,13 +3,20 @@
 import asyncio
 import json
 import logging
+from datetime import datetime, timezone
 
+from app.cache import valkey_client
 from app.commands.models import Command
 from app.commands.repository import CommandRepository
 from app.commands.service import CommandService
+from app.config import settings
 from app.database.session import get_db_session
 from app.events.nats_client import nats_client
 from app.websocket.gateway import connection_manager
+
+import nats
+import json
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +79,6 @@ class CommandConsumer:
 
         async with get_db_session() as session:
             repo = CommandRepository(session)
-            command_service = CommandService()
 
             # Get the command from database
             command = await repo.get_by_id(command_id)
@@ -81,7 +87,7 @@ class CommandConsumer:
                 return
 
             # Check if command has expired
-            if expires_at and datetime.fromisoformat(expires_at).replace(tzinfo=None) < datetime.now():
+            if expires_at and datetime.fromisoformat(expires_at).replace(tzinfo=None) < datetime.now(timezone.utc):
                 await session.execute(
                     Command.__table__.update()
                     .where(Command.id == command_id)

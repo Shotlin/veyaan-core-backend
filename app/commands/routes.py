@@ -63,14 +63,26 @@ async def list_commands(
     current_user: User = Depends(get_current_user),
     service: CommandService = Depends(get_command_service),
 ):
-    # This would need to be implemented with proper filtering
-    return ApiResponse(data=PaginatedResponse(
-        items=[],
-        total=0,
+    commands, total = await service.list_commands(
+        owner_id=current_user.id,
+        device_id=device_id,
+        state=state,
+        risk_level=risk_level,
+        command_type=command_type,
+        start_date=start_date,
+        end_date=end_date,
         page=page,
         page_size=page_size,
-        has_next=False,
-        has_prev=False,
+    )
+    has_next = (page * page_size) < total
+    has_prev = page > 1
+    return ApiResponse(data=PaginatedResponse(
+        items=[CommandResponse.model_validate(cmd) for cmd in commands],
+        total=total,
+        page=page,
+        page_size=page_size,
+        has_next=has_next,
+        has_prev=has_prev,
     ))
 
 

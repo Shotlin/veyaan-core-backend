@@ -118,17 +118,21 @@ class CommandService:
         state: str = None,
         risk_level: str = None,
         command_type: str = None,
+        start_date: datetime = None,
+        end_date: datetime = None,
         page: int = 1,
         page_size: int = 20,
     ):
         async with get_db_session() as session:
             repo = CommandRepository(session)
-            # We need to filter by owner through device
             commands, total = await repo.list_commands(
+                owner_id=owner_id,
                 device_id=device_id,
                 state=CommandState(state) if state else None,
                 risk_level=risk_level,
                 command_type=command_type,
+                start_date=start_date,
+                end_date=end_date,
                 page=page,
                 page_size=page_size,
             )

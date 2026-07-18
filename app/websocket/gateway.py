@@ -1,35 +1,47 @@
-import hmac
+"""Command consumer worker for processing commands from NATS."""
+
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
-from uuid import UUID, uuid4
 
-import nats
-from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
-
+from app.commands.models import Command
+from app.commands.repository import CommandRepository
+from app.commands.service import CommandService
 from app.cache import valkey_client
 from app.config import settings
-from app.database.connection import close_db, get_session, init_db
+from app.database.session import get_db_session
+from app.events.nats_client import nats_client
+from app.websocket.gateway import connection_manager
+
+import nats
+import nats.js
+import json
+import logging
+from datetime import datetime, timezone
+from typing import Optional
+from uuid import UUID
+
+from app.config import settings
+from app.cache import valkey_client
+from app.database.connection import close_db, get_db_session, init_db
 from app.devices.models import DeviceStatus
 from app.devices.repository import DeviceRepository
 from app.events.nats_client import nats_client
+from app.websocket.gateway import connection_manager
 from app.websocket.protocol.messages import (
+    HelloMessage,
     WelcomeMessage,
+    PingMessage,
 )
 from app.websocket.protocol.validator import ProtocolError, ProtocolValidator
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: dict[UUID, DeviceConnection] = {}
+        self.active_connections: dict[UUID, "DeviceConnection"] = {}
         self.device_to_connection: dict[UUID, UUID] = {}  # device_id -> connection_id
 
     async def register_connection(self, device_id: UUID, connection_id: UUID) -> None:
@@ -94,7 +106,7 @@ class ConnectionManager:
 class DeviceConnection:
     def __init__(self, connection_id: UUID):
         self.connection_id = connection_id
-        self.websocket: WebSocket | None = None
+        self.websocket: nats.NATS | None = None
 
     async def close(self, code: int = 1000, reason: str = "") -> None:
         if self.websocket:
@@ -161,7 +173,7 @@ async def websocket_endpoint(
     device_conn.websocket = websocket
 
     # Verify device credentials
-    async with get_session() as session:
+    async with get_db_session() as session:
         repo = DeviceRepository(session)
         device = await repo.get_device(device_id)
 
@@ -275,12 +287,18 @@ async def handle_acknowledge(device_id: UUID, msg) -> None:
 
 
 async def handle_progress(device_id: UUID, msg) -> None:
-    """Handle command progress update."""
+    """Handle command progress update from device."""
     logger.debug("command_progress", device_id=str(device_id), command_id=str(msg.command_id), progress=msg.progress_percent)
+
+    # Publish to NATS for backend processing
+    await nats_client.publish(
+        f"veyaan.commands.progress.{msg.command_id}",
+        msg.model_dump_json().encode(),
+    )
 
 
 async def handle_result(device_id: UUID, msg) -> None:
-    """Handle command completion result."""
+    """Handle command completion result from device."""
     logger.info("command_completed", device_id=str(device_id), command_id=str(msg.command_id), success=msg.success)
 
     # Publish to NATS for backend processing
@@ -292,14 +310,24 @@ async def handle_result(device_id: UUID, msg) -> None:
 
 async def handle_status_update(device_id: UUID, msg) -> None:
     """Handle device status update."""
+    logger.info("device_status_update", device_id=str(device_id), state=msg.state)
+
+    # Update presence in Valkey
     await valkey_client.set_hash(
         f"device:presence:{device_id}",
         {
             "state": msg.state,
             "updated_at": datetime.now(timezone.utc).isoformat(),
-            "metadata": json.dumps(msg.metadata) if msg.metadata else "{}",
+            "active_commands": msg.active_command_count,
+            "app_version": msg.app_version,
         },
         ttl=90,
+    )
+
+    # Publish to NATS
+    await nats_client.publish(
+        "veyaan.device.status",
+        msg.model_dump_json().encode(),
     )
 
 

@@ -3,11 +3,14 @@
 import asyncio
 import json
 import logging
+from typing import Optional
 
+from app.events.nats_client import nats_client
 from app.events.outbox import OutboxRepository
-
 from app.database.session import get_db_session
 from app.events.nats_client import nats_client
+from app.config import settings
+from app.database.session import get_db_session
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +60,8 @@ class OutboxPublisher:
                     logger.warning("Failed to publish outbox event", event_id=str(event.id), error=str(e))
                     await self._increment_attempt(session, event.id, str(e))
 
-                if published > 0:
-                    await session.commit()
+            if published > 0:
+                await session.commit()
 
             return published
 
@@ -83,7 +86,7 @@ class OutboxPublisher:
     async def _increment_attempt(self, session, event_id, error: str):
         from app.events.outbox import OutboxRepository
         repo = OutboxRepository(session)
-        await repo.increment_attempt(event_id, str(e))
+        await repo.increment_attempt(event_id, str(error))
 
 
 async def main():
@@ -94,9 +97,11 @@ async def main():
     from app.cache import valkey_client
     from app.database.connection import close_db, init_db
     from app.events.nats_client import nats_client
+    from app.config import settings
 
     await init_db()
     await valkey_client.connect()
+
     nats_client.nc = await nats.connect(settings.NATS_URL)
     nats_client.js = nats_client.nc.jetstream()
 
