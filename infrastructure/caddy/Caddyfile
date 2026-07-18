@@ -1,0 +1,31 @@
+{
+    admin off
+    auto_https disable_redirects
+}
+
+:80 {
+    respond "VEYAAN API - Use HTTPS" 400
+}
+
+api.veyaan.local {
+    reverse_proxy api:8000 {
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-For {remote_host}
+    }
+}
+
+ws.veyaan.local {
+    reverse_proxy gateway:8001 {
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-For {remote_host}
+    }
+}
+
+monitoring.veyaan.local {
+    reverse_proxy monitoring:9090
+}
+
+# Health endpoint accessible without auth
+localhost:8080 {
+    respond "OK" 200
+}

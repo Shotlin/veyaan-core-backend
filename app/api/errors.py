@@ -1,0 +1,64 @@
+from typing import Optional
+
+from strenum import StrEnum
+
+
+class ErrorCode(StrEnum):
+    # Auth
+    INVALID_TOKEN = "INVALID_TOKEN"
+    EXPIRED_TOKEN = "EXPIRED_TOKEN"
+    USER_NOT_FOUND = "USER_NOT_FOUND"
+
+    # Validation
+    VALIDATION_ERROR = "VALIDATION_ERROR"
+    INVALID_IDEMPOTENCY_KEY = "INVALID_IDEMPOTENCY_KEY"
+    IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT"
+
+    # Devices
+    DEVICE_NOT_FOUND = "DEVICE_NOT_FOUND"
+    DEVICE_REVOKED = "DEVICE_REVOKED"
+    DEVICE_OFFLINE = "DEVICE_OFFLINE"
+    PAIRING_EXPIRED = "PAIRING_EXPIRED"
+    PAIRING_INVALID = "PAIRING_INVALID"
+    INVALID_CREDENTIAL = "INVALID_CREDENTIAL"
+    INVALID_PROTOCOL_VERSION = "INVALID_PROTOCOL_VERSION"
+
+    # Commands
+    COMMAND_NOT_FOUND = "COMMAND_NOT_FOUND"
+    COMMAND_EXPIRED = "COMMAND_EXPIRED"
+    COMMAND_BLOCKED = "COMMAND_BLOCKED"
+    INVALID_COMMAND_TYPE = "INVALID_COMMAND_TYPE"
+    INVALID_PARAMETERS = "INVALID_PARAMETERS"
+
+    # Approvals
+    APPROVAL_NOT_FOUND = "APPROVAL_NOT_FOUND"
+    APPROVAL_EXPIRED = "APPROVAL_EXPIRED"
+    APPROVAL_ALREADY_DECIDED = "APPROVAL_ALREADY_DECIDED"
+    INVALID_DECISION_NONCE = "INVALID_DECISION_NONCE"
+
+    # Emergency Stop
+    EMERGENCY_STOP_ACTIVE = "EMERGENCY_STOP_ACTIVE"
+    EMERGENCY_STOP_NOT_ACTIVE = "EMERGENCY_STOP_NOT_ACTIVE"
+    INVALID_CONFIRMATION = "INVALID_CONFIRMATION"
+
+    # System
+    INTERNAL_ERROR = "INTERNAL_ERROR"
+    SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE"
+    RATE_LIMITED = "RATE_LIMITED"
+    FORBIDDEN = "FORBIDDEN"
+    NOT_FOUND = "NOT_FOUND"
+
+
+class ApiError(Exception):
+    def __init__(
+        self,
+        code: ErrorCode,
+        message: str,
+        details: Optional[dict] = None,
+        status_code: int = 400
+    ):
+        self.code = code
+        self.message = message
+        self.details = details
+        self.status_code = status_code
+        super().__init__(message)
