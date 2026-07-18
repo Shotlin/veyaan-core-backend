@@ -16,7 +16,6 @@ from app.approvals.models import ApprovalStatus
 
 
 class TestApprovalE2E:
-
     @pytest.mark.asyncio
     async def test_high_risk_command_requires_approval(self):
         """
@@ -37,12 +36,13 @@ class TestApprovalE2E:
         request.delayed_execution_allowed = False
         request.expires_at = None
 
-        with patch("app.commands.service.get_db_session") as mock_db, \
-             patch("app.commands.service.DeviceRepository") as mock_dev_repo_class, \
-             patch("app.commands.service.CommandRepository") as mock_repo_class, \
-             patch("app.commands.service.EmergencyStopService") as mock_estop, \
-             patch("app.commands.service.command_registry") as mock_registry:
-
+        with (
+            patch("app.commands.service.get_db_session") as mock_db,
+            patch("app.commands.service.DeviceRepository") as mock_dev_repo_class,
+            patch("app.commands.service.CommandRepository") as mock_repo_class,
+            patch("app.commands.service.EmergencyStopService") as mock_estop,
+            patch("app.commands.service.command_registry") as mock_registry,
+        ):
             mock_device = MagicMock()
             mock_device.owner_id = owner_id
             mock_device.id = device_id
@@ -78,8 +78,9 @@ class TestApprovalE2E:
             mock_session.add = MagicMock(side_effect=lambda obj: commands_added.append(obj))
 
             async def refresh_side(obj):
-                if not hasattr(obj, 'id') or obj.id is None:
+                if not hasattr(obj, "id") or obj.id is None:
                     obj.id = uuid4()
+
             mock_session.refresh = AsyncMock(side_effect=refresh_side)
             mock_session.__aenter__ = AsyncMock(return_value=mock_session)
             mock_session.__aexit__ = AsyncMock(return_value=False)
@@ -97,6 +98,7 @@ class TestApprovalE2E:
 
             # The command object added should have requires_approval=True
             from app.commands.models import Command
+
             command_objs = [o for o in commands_added if isinstance(o, Command)]
             if command_objs:
                 assert command_objs[0].requires_approval is True
@@ -120,11 +122,12 @@ class TestApprovalE2E:
         outbox_events_written = []
         transitions_made = []
 
-        with patch("app.approvals.service.get_db_session") as mock_db, \
-             patch("app.approvals.service.ApprovalRepository") as mock_repo_class, \
-             patch("app.approvals.service.OutboxRepository") as mock_outbox_class, \
-             patch("app.approvals.service.transition_command") as mock_transition:
-
+        with (
+            patch("app.approvals.service.get_db_session") as mock_db,
+            patch("app.approvals.service.ApprovalRepository") as mock_repo_class,
+            patch("app.approvals.service.OutboxRepository") as mock_outbox_class,
+            patch("app.approvals.service.transition_command") as mock_transition,
+        ):
             # Initial pending approval
             mock_approval = MagicMock()
             mock_approval.id = approval_id
@@ -154,11 +157,14 @@ class TestApprovalE2E:
 
             async def record_transition(session, cmd_id, state, actor):
                 transitions_made.append(state)
+
             mock_transition.side_effect = record_transition
 
             mock_outbox = AsyncMock()
+
             async def record_event(**kwargs):
                 outbox_events_written.append(kwargs)
+
             mock_outbox.add_event = AsyncMock(side_effect=record_event)
             mock_outbox_class.return_value = mock_outbox
 
@@ -180,7 +186,9 @@ class TestApprovalE2E:
                 r = MagicMock()
                 exec_call[0] += 1
                 # Alternate between command and device lookups
-                r.scalar_one_or_none.return_value = mock_command if exec_call[0] % 2 == 1 else mock_device
+                r.scalar_one_or_none.return_value = (
+                    mock_command if exec_call[0] % 2 == 1 else mock_device
+                )
                 return r
 
             mock_session = AsyncMock()
@@ -202,8 +210,9 @@ class TestApprovalE2E:
         assert result is not None
         assert result["status"] == ApprovalStatus.APPROVED.value
         # Outbox event must have been written
-        assert any(e.get("event_type") == "command.queued" for e in outbox_events_written), \
-            "Outbox event must be written on approval"
+        assert any(
+            e.get("event_type") == "command.queued" for e in outbox_events_written
+        ), "Outbox event must be written on approval"
         # Single commit — not multiple
         assert mock_session.commit.call_count == 1, "Must commit exactly once (atomic transaction)"
 
@@ -221,11 +230,12 @@ class TestApprovalE2E:
 
         outbox_events_written = []
 
-        with patch("app.approvals.service.get_db_session") as mock_db, \
-             patch("app.approvals.service.ApprovalRepository") as mock_repo_class, \
-             patch("app.approvals.service.OutboxRepository") as mock_outbox_class, \
-             patch("app.approvals.service.transition_command") as mock_transition:
-
+        with (
+            patch("app.approvals.service.get_db_session") as mock_db,
+            patch("app.approvals.service.ApprovalRepository") as mock_repo_class,
+            patch("app.approvals.service.OutboxRepository") as mock_outbox_class,
+            patch("app.approvals.service.transition_command") as mock_transition,
+        ):
             mock_approval = MagicMock()
             mock_approval.id = approval_id
             mock_approval.owner_id = owner_id
@@ -254,15 +264,17 @@ class TestApprovalE2E:
             mock_transition.side_effect = AsyncMock()
 
             mock_outbox = AsyncMock()
+
             async def record_event(**kwargs):
                 outbox_events_written.append(kwargs)
+
             mock_outbox.add_event = AsyncMock(side_effect=record_event)
             mock_outbox_class.return_value = mock_outbox
 
             mock_session = AsyncMock()
-            mock_session.execute = AsyncMock(return_value=MagicMock(
-                scalar_one_or_none=MagicMock(return_value=None)
-            ))
+            mock_session.execute = AsyncMock(
+                return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+            )
             mock_session.flush = AsyncMock()
             mock_session.commit = AsyncMock()
             mock_session.__aenter__ = AsyncMock(return_value=mock_session)
@@ -279,5 +291,4 @@ class TestApprovalE2E:
 
         assert result["status"] == ApprovalStatus.REJECTED.value
         # No outbox event for rejected commands
-        assert len(outbox_events_written) == 0, \
-            "Rejected commands must NOT write outbox events"
+        assert len(outbox_events_written) == 0, "Rejected commands must NOT write outbox events"

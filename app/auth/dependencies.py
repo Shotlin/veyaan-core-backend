@@ -35,7 +35,7 @@ async def get_current_user_context(
         id=user.id,
         supabase_user_id=user.supabase_user_id,
         email=user.email,
-        status=user.status.value if hasattr(user.status, 'value') else str(user.status),
+        status=user.status.value if hasattr(user.status, "value") else str(user.status),
     )
 
 
@@ -55,7 +55,7 @@ async def get_optional_user_context(
             id=user.id,
             supabase_user_id=user.supabase_user_id,
             email=user.email,
-            status=user.status.value if hasattr(user.status, 'value') else str(user.status),
+            status=user.status.value if hasattr(user.status, "value") else str(user.status),
         )
     except ApiError:
         return None

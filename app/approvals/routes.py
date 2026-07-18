@@ -41,14 +41,16 @@ async def list_approvals(
     items = [ApprovalResponse.model_validate(a) for a in approvals]
     has_next = (page * page_size) < total
     has_prev = page > 1
-    return ApiResponse(data=PaginatedResponse(
-        items=items,
-        total=total,
-        page=page,
-        page_size=page_size,
-        has_next=has_next,
-        has_prev=has_prev,
-    ))
+    return ApiResponse(
+        data=PaginatedResponse(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+            has_next=has_next,
+            has_prev=has_prev,
+        )
+    )
 
 
 @router.get("/{approval_id}", response_model=ApiResponse[ApprovalResponse])
@@ -82,7 +84,9 @@ async def approve(
         note=request.note,
     )
     if not response:
-        raise ApiError(ErrorCode.APPROVAL_NOT_FOUND, "Approval not found or cannot be decided", status_code=404)
+        raise ApiError(
+            ErrorCode.APPROVAL_NOT_FOUND, "Approval not found or cannot be decided", status_code=404
+        )
     return ApiResponse(data=response)
 
 
@@ -103,5 +107,7 @@ async def reject(
         note=request.note,
     )
     if not response:
-        raise ApiError(ErrorCode.APPROVAL_NOT_FOUND, "Approval not found or cannot be decided", status_code=404)
+        raise ApiError(
+            ErrorCode.APPROVAL_NOT_FOUND, "Approval not found or cannot be decided", status_code=404
+        )
     return ApiResponse(data=response)

@@ -38,15 +38,14 @@ class ProtocolValidator:
         if version not in cls.SUPPORTED_PROTOCOLS:
             raise ProtocolError(
                 "UNSUPPORTED_PROTOCOL",
-                f"Protocol version '{version}' not supported. Supported: {cls.SUPPORTED_PROTOCOLS}"
+                f"Protocol version '{version}' not supported. Supported: {cls.SUPPORTED_PROTOCOLS}",
             )
 
     @classmethod
     def validate_message_size(cls, data: bytes) -> None:
         if len(data) > cls.MAX_MESSAGE_SIZE:
             raise ProtocolError(
-                "MESSAGE_TOO_LARGE",
-                f"Message exceeds maximum size of {cls.MAX_MESSAGE_SIZE} bytes"
+                "MESSAGE_TOO_LARGE", f"Message exceeds maximum size of {cls.MAX_MESSAGE_SIZE} bytes"
             )
 
     @classmethod

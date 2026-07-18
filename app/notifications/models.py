@@ -32,5 +32,7 @@ class NotificationRecord(Base):
     status = Column(String(20), nullable=False, default="pending", index=True)
     payload = Column(JSONB, nullable=True)  # safe, non-sensitive notification data
     error_message = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
     delivered_at = Column(DateTime(timezone=True), nullable=True)

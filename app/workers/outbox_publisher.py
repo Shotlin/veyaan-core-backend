@@ -50,7 +50,9 @@ class OutboxPublisher:
                     await repo.mark_published(event.id)
                     published += 1
                 except Exception as e:
-                    logger.warning("Failed to publish outbox event", event_id=str(event.id), error=str(e))
+                    logger.warning(
+                        "Failed to publish outbox event", event_id=str(event.id), error=str(e)
+                    )
                     attempt_count = event.attempt_count or 0
                     if attempt_count >= 3:
                         await repo.mark_failed(event.id, str(e))

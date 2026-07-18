@@ -61,7 +61,7 @@ class ApprovalResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class PaginatedResponse(BaseModel, Generic[T]):

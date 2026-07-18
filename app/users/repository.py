@@ -18,9 +18,7 @@ class UserRepository:
         return result.scalar_one_or_none()
 
     async def get(self, user_id: UUID) -> Optional[User]:
-        result = await self.session.execute(
-            select(User).where(User.id == user_id)
-        )
+        result = await self.session.execute(select(User).where(User.id == user_id))
         return result.scalar_one_or_none()
 
     async def create(
@@ -33,7 +31,7 @@ class UserRepository:
             supabase_user_id=supabase_user_id,
             display_name=display_name or email.split("@")[0],
             email=email,
-            status=UserStatus.ACTIVE
+            status=UserStatus.ACTIVE,
         )
         self.session.add(user)
         await self.session.flush()

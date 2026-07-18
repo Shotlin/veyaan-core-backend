@@ -26,13 +26,15 @@ class OutboxEvent(Base):
     payload = Column(JSONB, nullable=False, default=dict)
     headers = Column(JSONB, nullable=True)
     status = Column(String(20), nullable=False, default=OutboxEventStatus.PENDING.value, index=True)
-    available_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    available_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
     attempt_count = Column(Integer, nullable=False, default=0)
     last_error = Column(Text, nullable=True)
     published_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
-
-    __table_args__ = (
-        Index("ix_outbox_pending", "status", "available_at", "created_at"),
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+    __table_args__ = (Index("ix_outbox_pending", "status", "available_at", "created_at"),)

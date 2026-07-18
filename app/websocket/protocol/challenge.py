@@ -47,17 +47,32 @@ async def consume_challenge(nonce: str) -> bool:
     return True
 
 
+def build_challenge_message(
+    device_id: UUID,
+    connection_id: UUID,
+    nonce: str,
+    server_time_iso: str,
+    protocol_version: str,
+    app_version: str,
+) -> bytes:
+    """Build the canonical byte sequence for Ed25519 signature."""
+    msg_str = (
+        f"{device_id}:{connection_id}:{nonce}:{server_time_iso}:{protocol_version}:{app_version}"
+    )
+    return msg_str.encode("utf-8")
+
+
 def verify_ed25519_signature(
     public_key_b64: str,
-    nonce_hex: str,
+    message: bytes,
     signature_b64: str,
 ) -> bool:
     """
-    Verify an Ed25519 signature of the nonce.
+    Verify an Ed25519 signature of the canonical message.
 
     Args:
         public_key_b64: Base64-encoded Ed25519 public key (from device registration)
-        nonce_hex: The hex nonce that was sent as the challenge
+        message: The canonical byte sequence message that was signed
         signature_b64: Base64-encoded signature produced by the device's private key
 
     Returns:
@@ -67,7 +82,6 @@ def verify_ed25519_signature(
         public_key_bytes = base64.b64decode(public_key_b64)
         public_key = Ed25519PublicKey.from_public_bytes(public_key_bytes)
         signature_bytes = base64.b64decode(signature_b64)
-        message = nonce_hex.encode("utf-8")
         public_key.verify(signature_bytes, message)
         return True
     except (InvalidSignature, Exception):
@@ -76,14 +90,19 @@ def verify_ed25519_signature(
 
 async def verify_device_challenge_response(
     device_id: UUID,
+    connection_id: UUID,
     nonce: str,
+    server_time_iso: str,
     signature_b64: str,
     public_key_b64: str,
+    protocol_version: str,
+    app_version: str,
 ) -> tuple[bool, str]:
     """
     Full challenge-response verification:
       1. Consume nonce (checks it exists + is fresh, deletes it)
-      2. Verify Ed25519 signature
+      2. Reconstruct message
+      3. Verify Ed25519 signature
 
     Returns (success, error_message)
     """
@@ -91,7 +110,16 @@ async def verify_device_challenge_response(
     if not nonce_valid:
         return False, "Challenge nonce invalid or expired"
 
-    if not verify_ed25519_signature(public_key_b64, nonce, signature_b64):
+    message = build_challenge_message(
+        device_id=device_id,
+        connection_id=connection_id,
+        nonce=nonce,
+        server_time_iso=server_time_iso,
+        protocol_version=protocol_version,
+        app_version=app_version,
+    )
+
+    if not verify_ed25519_signature(public_key_b64, message, signature_b64):
         return False, "Invalid device signature"
 
     return True, ""

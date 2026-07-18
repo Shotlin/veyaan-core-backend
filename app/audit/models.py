@@ -59,10 +59,30 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
-    user_id = Column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
-    device_id = Column(PG_UUID(as_uuid=True), ForeignKey("devices.id", ondelete="SET NULL"), nullable=True, index=True)
-    command_id = Column(PG_UUID(as_uuid=True), ForeignKey("commands.id", ondelete="SET NULL"), nullable=True, index=True)
-    approval_id = Column(PG_UUID(as_uuid=True), ForeignKey("approvals.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    device_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("devices.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    command_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("commands.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    approval_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("approvals.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     category = Column(String(50), nullable=False, index=True)
     action = Column(String(100), nullable=False, index=True)
     result = Column(String(50), nullable=False)
@@ -71,7 +91,9 @@ class AuditLog(Base):
     trace_id = Column(String(64), nullable=True, index=True)
     ip_address = Column(String(45), nullable=True)
     user_agent = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
 
     user = relationship("User")
     device = relationship("Device")

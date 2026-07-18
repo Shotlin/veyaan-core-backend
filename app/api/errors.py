@@ -51,11 +51,7 @@ class ErrorCode(StrEnum):
 
 class ApiError(Exception):
     def __init__(
-        self,
-        code: ErrorCode,
-        message: str,
-        details: Optional[dict] = None,
-        status_code: int = 400
+        self, code: ErrorCode, message: str, details: Optional[dict] = None, status_code: int = 400
     ):
         self.code = code
         self.message = message

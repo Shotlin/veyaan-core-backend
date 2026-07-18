@@ -11,10 +11,7 @@ class ValkeyClient:
 
     async def connect(self):
         self.client = valkey.from_url(
-            settings.VALKEY_URL,
-            encoding="utf-8",
-            decode_responses=True,
-            max_connections=20
+            settings.VALKEY_URL, encoding="utf-8", decode_responses=True, max_connections=20
         )
         await self.client.ping()
 
@@ -33,6 +30,7 @@ class ValkeyClient:
             return None
         try:
             import json
+
             return json.loads(value)
         except (json.JSONDecodeError, TypeError):
             return value
@@ -50,6 +48,7 @@ class ValkeyClient:
             ttl = settings.VALKEY_DEFAULT_TTL
         if isinstance(value, (dict, list)):
             import json
+
             value = json.dumps(value)
         return await self.client.set(full_key, value, ex=ttl)
 

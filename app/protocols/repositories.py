@@ -40,8 +40,12 @@ class ApprovalRepositoryProtocol(Protocol):
         self, approval_id: UUID, owner_id: UUID, decision: str, nonce: str, note: Optional[str]
     ) -> tuple[bool, Optional[str]]: ...
     async def list_approvals(
-        self, owner_id: UUID, status: Optional[str], risk_level: Optional[str],
-        page: int, page_size: int
+        self,
+        owner_id: UUID,
+        status: Optional[str],
+        risk_level: Optional[str],
+        page: int,
+        page_size: int,
     ) -> tuple: ...
     async def expire_pending_approvals(self) -> int: ...
 
@@ -59,8 +63,7 @@ class OutboxRepositoryProtocol(Protocol):
     """Interface for OutboxRepository."""
 
     async def add_event(
-        self, event_type: str, aggregate_type: str, aggregate_id: str,
-        subject: str, payload: dict
+        self, event_type: str, aggregate_type: str, aggregate_id: str, subject: str, payload: dict
     ) -> None: ...
     async def get_pending_events(self, limit: int) -> list: ...
     async def mark_published(self, event_id: UUID) -> None: ...
@@ -71,9 +74,7 @@ class AuditRepositoryProtocol(Protocol):
     """Interface for AuditRepository."""
 
     async def create_log(self, **kwargs) -> None: ...
-    async def list_logs(
-        self, user_id: UUID, filters: dict, page: int, page_size: int
-    ) -> tuple: ...
+    async def list_logs(self, user_id: UUID, filters: dict, page: int, page_size: int) -> tuple: ...
 
 
 class UserRepositoryProtocol(Protocol):

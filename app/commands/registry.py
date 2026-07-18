@@ -48,49 +48,59 @@ class CommandRegistry:
 command_registry = CommandRegistry()
 
 # Low risk - no approval required
-command_registry.register(CommandDefinition(
-    command_type="system.ping",
-    risk_level=RiskLevel.LOW,
-    parameter_schema=PingParams,
-    requires_approval=False,
-    delayed_execution_allowed=True,
-    description="Ping device to check connectivity",
-))
+command_registry.register(
+    CommandDefinition(
+        command_type="system.ping",
+        risk_level=RiskLevel.LOW,
+        parameter_schema=PingParams,
+        requires_approval=False,
+        delayed_execution_allowed=True,
+        description="Ping device to check connectivity",
+    )
+)
 
-command_registry.register(CommandDefinition(
-    command_type="device.get_status",
-    risk_level=RiskLevel.LOW,
-    parameter_schema=DeviceStatusParams,
-    requires_approval=False,
-    delayed_execution_allowed=True,
-    description="Get device status information",
-))
+command_registry.register(
+    CommandDefinition(
+        command_type="device.get_status",
+        risk_level=RiskLevel.LOW,
+        parameter_schema=DeviceStatusParams,
+        requires_approval=False,
+        delayed_execution_allowed=True,
+        description="Get device status information",
+    )
+)
 
 # Medium risk - approval optional
-command_registry.register(CommandDefinition(
-    command_type="app.open_test",
-    risk_level=RiskLevel.MEDIUM,
-    parameter_schema=OpenTestAppParams,
-    requires_approval=False,
-    delayed_execution_allowed=True,
-    description="Open a test application on device",
-))
+command_registry.register(
+    CommandDefinition(
+        command_type="app.open_test",
+        risk_level=RiskLevel.MEDIUM,
+        parameter_schema=OpenTestAppParams,
+        requires_approval=False,
+        delayed_execution_allowed=True,
+        description="Open a test application on device",
+    )
+)
 
-command_registry.register(CommandDefinition(
-    command_type="system.take_test_screenshot",
-    risk_level=RiskLevel.MEDIUM,
-    parameter_schema=TakeScreenshotParams,
-    requires_approval=False,
-    delayed_execution_allowed=True,
-    description="Take a test screenshot",
-))
+command_registry.register(
+    CommandDefinition(
+        command_type="system.take_test_screenshot",
+        risk_level=RiskLevel.MEDIUM,
+        parameter_schema=TakeScreenshotParams,
+        requires_approval=False,
+        delayed_execution_allowed=True,
+        description="Take a test screenshot",
+    )
+)
 
 # High risk - approval required
-command_registry.register(CommandDefinition(
-    command_type="system.emergency_stop_test",
-    risk_level=RiskLevel.HIGH,
-    parameter_schema=EmergencyStopTestParams,
-    requires_approval=True,
-    delayed_execution_allowed=False,
-    description="Test emergency stop activation",
-))
+command_registry.register(
+    CommandDefinition(
+        command_type="system.emergency_stop_test",
+        risk_level=RiskLevel.HIGH,
+        parameter_schema=EmergencyStopTestParams,
+        requires_approval=True,
+        delayed_execution_allowed=False,
+        description="Test emergency stop activation",
+    )
+)

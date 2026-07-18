@@ -16,7 +16,9 @@ class CommandRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def create_command(self, request: CreateCommandRequest, risk_level, requires_approval: bool) -> Command:
+    async def create_command(
+        self, request: CreateCommandRequest, risk_level, requires_approval: bool
+    ) -> Command:
         command = Command(
             device_id=request.device_id,
             command_type=request.command_type,
@@ -40,7 +42,14 @@ class CommandRepository:
         await self.session.refresh(task)
         return task
 
-    async def record_state_event(self, command_id: UUID, previous_state: Optional[CommandState], new_state: CommandState, event_source: str, metadata: dict = None) -> CommandStateEvent:
+    async def record_state_event(
+        self,
+        command_id: UUID,
+        previous_state: Optional[CommandState],
+        new_state: CommandState,
+        event_source: str,
+        metadata: dict = None,
+    ) -> CommandStateEvent:
         event = CommandStateEvent(
             command_id=command_id,
             previous_state=previous_state,
@@ -60,17 +69,20 @@ class CommandRepository:
         )
         return result.scalar_one_or_none()
 
-    async def get_by_idempotency_key(self, device_id: UUID, idempotency_key: str) -> Optional[Command]:
+    async def get_by_idempotency_key(
+        self, device_id: UUID, idempotency_key: str
+    ) -> Optional[Command]:
         result = await self.session.execute(
-            select(Command)
-            .where(Command.device_id == device_id, Command.idempotency_key == idempotency_key)
+            select(Command).where(
+                Command.device_id == device_id, Command.idempotency_key == idempotency_key
+            )
         )
         return result.scalar_one_or_none()
 
-    async def update_state(self, command_id: UUID, new_state: CommandState, event_source: str, metadata: dict = None) -> bool:
-        result = await self.session.execute(
-            select(Command).where(Command.id == command_id)
-        )
+    async def update_state(
+        self, command_id: UUID, new_state: CommandState, event_source: str, metadata: dict = None
+    ) -> bool:
+        result = await self.session.execute(select(Command).where(Command.id == command_id))
         command = result.scalar_one_or_none()
         if not command:
             return False
@@ -87,7 +99,13 @@ class CommandRepository:
             command.acknowledged_at = now
         elif new_state == CommandState.RUNNING:
             command.started_at = now
-        elif new_state in (CommandState.SUCCEEDED, CommandState.FAILED, CommandState.CANCELLED, CommandState.EXPIRED, CommandState.TIMED_OUT):
+        elif new_state in (
+            CommandState.SUCCEEDED,
+            CommandState.FAILED,
+            CommandState.CANCELLED,
+            CommandState.EXPIRED,
+            CommandState.TIMED_OUT,
+        ):
             command.finished_at = now
 
         await self.session.flush()
@@ -109,7 +127,9 @@ class CommandRepository:
         query = select(Command).options(selectinload(Command.task))
 
         if owner_id:
-            query = query.join(Device, Command.device_id == Device.id).where(Device.owner_id == owner_id)
+            query = query.join(Device, Command.device_id == Device.id).where(
+                Device.owner_id == owner_id
+            )
         if device_id:
             query = query.where(Command.device_id == device_id)
         if state:
@@ -128,7 +148,9 @@ class CommandRepository:
         # Count total
         count_query = select(Command.id)
         if owner_id:
-            count_query = count_query.join(Device, Command.device_id == Device.id).where(Device.owner_id == owner_id)
+            count_query = count_query.join(Device, Command.device_id == Device.id).where(
+                Device.owner_id == owner_id
+            )
         if device_id:
             count_query = count_query.where(Command.device_id == device_id)
         if state:
@@ -166,7 +188,9 @@ class CommandRepository:
             .join(Device, Command.device_id == Device.id)
             .outerjoin(EmergencyStop, Device.owner_id == EmergencyStop.owner_id)
             .where(Command.state == CommandState.QUEUED)
-            .where(or_(Command.expires_at.is_(None), Command.expires_at > datetime.now(timezone.utc)))
+            .where(
+                or_(Command.expires_at.is_(None), Command.expires_at > datetime.now(timezone.utc))
+            )
             .where(or_(EmergencyStop.active.is_(None), ~EmergencyStop.active))
             .order_by(Command.created_at.asc())
             .limit(limit)

@@ -19,13 +19,44 @@ class StateTransitionError(Exception):
 
 ALLOWED_TRANSITIONS: dict[CommandState, set[CommandState]] = {
     CommandState.RECEIVED: {CommandState.VALIDATED},
-    CommandState.VALIDATED: {CommandState.AWAITING_APPROVAL, CommandState.QUEUED, CommandState.REJECTED, CommandState.BLOCKED_BY_EMERGENCY_STOP},
-    CommandState.AWAITING_APPROVAL: {CommandState.APPROVED, CommandState.REJECTED, CommandState.EXPIRED, CommandState.CANCELLED},
-    CommandState.APPROVED: {CommandState.QUEUED, CommandState.BLOCKED_BY_EMERGENCY_STOP, CommandState.EXPIRED, CommandState.CANCELLED},
-    CommandState.QUEUED: {CommandState.DELIVERED, CommandState.BLOCKED_BY_EMERGENCY_STOP, CommandState.EXPIRED, CommandState.CANCELLED, CommandState.FAILED},
-    CommandState.DELIVERED: {CommandState.ACKNOWLEDGED, CommandState.TIMED_OUT, CommandState.CANCELLED, CommandState.FAILED},
+    CommandState.VALIDATED: {
+        CommandState.AWAITING_APPROVAL,
+        CommandState.QUEUED,
+        CommandState.REJECTED,
+        CommandState.BLOCKED_BY_EMERGENCY_STOP,
+    },
+    CommandState.AWAITING_APPROVAL: {
+        CommandState.APPROVED,
+        CommandState.REJECTED,
+        CommandState.EXPIRED,
+        CommandState.CANCELLED,
+    },
+    CommandState.APPROVED: {
+        CommandState.QUEUED,
+        CommandState.BLOCKED_BY_EMERGENCY_STOP,
+        CommandState.EXPIRED,
+        CommandState.CANCELLED,
+    },
+    CommandState.QUEUED: {
+        CommandState.DELIVERED,
+        CommandState.BLOCKED_BY_EMERGENCY_STOP,
+        CommandState.EXPIRED,
+        CommandState.CANCELLED,
+        CommandState.FAILED,
+    },
+    CommandState.DELIVERED: {
+        CommandState.ACKNOWLEDGED,
+        CommandState.TIMED_OUT,
+        CommandState.CANCELLED,
+        CommandState.FAILED,
+    },
     CommandState.ACKNOWLEDGED: {CommandState.RUNNING, CommandState.FAILED, CommandState.CANCELLED},
-    CommandState.RUNNING: {CommandState.SUCCEEDED, CommandState.FAILED, CommandState.TIMED_OUT, CommandState.CANCELLED},
+    CommandState.RUNNING: {
+        CommandState.SUCCEEDED,
+        CommandState.FAILED,
+        CommandState.TIMED_OUT,
+        CommandState.CANCELLED,
+    },
 }
 
 
@@ -48,9 +79,7 @@ async def transition_command(
     metadata: dict | None = None,
 ) -> Command | None:
     result = await session.execute(
-        select(Command)
-        .where(Command.id == command_id)
-        .with_for_update()
+        select(Command).where(Command.id == command_id).with_for_update()
     )
     command = result.scalar_one_or_none()
     if not command:

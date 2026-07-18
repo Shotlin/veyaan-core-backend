@@ -9,7 +9,6 @@ from app.api.errors import ApiError
 
 
 class TestCommandIdempotency:
-
     def _make_request(self, command_type: str = "system.ping", idempotency_key: str = None):
         req = MagicMock()
         req.device_id = uuid4()
@@ -38,11 +37,12 @@ class TestCommandIdempotency:
         request = self._make_request("system.ping", key)
         existing = self._make_existing_command("system.ping")
 
-        with patch("app.commands.service.get_db_session") as mock_db, \
-             patch("app.commands.service.DeviceRepository") as mock_dev_repo_class, \
-             patch("app.commands.service.CommandRepository") as mock_repo_class, \
-             patch("app.commands.service.EmergencyStopService") as mock_estop:
-
+        with (
+            patch("app.commands.service.get_db_session") as mock_db,
+            patch("app.commands.service.DeviceRepository") as mock_dev_repo_class,
+            patch("app.commands.service.CommandRepository") as mock_repo_class,
+            patch("app.commands.service.EmergencyStopService") as mock_estop,
+        ):
             mock_device = MagicMock()
             mock_device.owner_id = owner_id
             mock_device.trust_status = MagicMock()
@@ -81,11 +81,12 @@ class TestCommandIdempotency:
         # Existing command has DIFFERENT type
         existing = self._make_existing_command("device.get_status")
 
-        with patch("app.commands.service.get_db_session") as mock_db, \
-             patch("app.commands.service.DeviceRepository") as mock_dev_repo_class, \
-             patch("app.commands.service.CommandRepository") as mock_repo_class, \
-             patch("app.commands.service.EmergencyStopService") as mock_estop:
-
+        with (
+            patch("app.commands.service.get_db_session") as mock_db,
+            patch("app.commands.service.DeviceRepository") as mock_dev_repo_class,
+            patch("app.commands.service.CommandRepository") as mock_repo_class,
+            patch("app.commands.service.EmergencyStopService") as mock_estop,
+        ):
             mock_device = MagicMock()
             mock_device.owner_id = owner_id
             mock_device.trust_status = MagicMock()
@@ -121,11 +122,12 @@ class TestCommandIdempotency:
         owner_id = uuid4()
         request = self._make_request()
 
-        with patch("app.commands.service.get_db_session") as mock_db, \
-             patch("app.commands.service.DeviceRepository") as mock_dev_repo_class, \
-             patch("app.commands.service.CommandRepository") as mock_repo_class, \
-             patch("app.commands.service.EmergencyStopService") as mock_estop:
-
+        with (
+            patch("app.commands.service.get_db_session") as mock_db,
+            patch("app.commands.service.DeviceRepository") as mock_dev_repo_class,
+            patch("app.commands.service.CommandRepository") as mock_repo_class,
+            patch("app.commands.service.EmergencyStopService") as mock_estop,
+        ):
             mock_device = MagicMock()
             mock_device.owner_id = owner_id
             mock_device.trust_status = MagicMock()

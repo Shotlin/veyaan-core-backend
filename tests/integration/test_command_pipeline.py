@@ -41,12 +41,13 @@ class TestCommandPipelineUnit:
 
         outbox_events = []
 
-        with patch("app.commands.service.get_db_session") as mock_db, \
-             patch("app.commands.service.DeviceRepository") as mock_dev_repo_class, \
-             patch("app.commands.service.CommandRepository") as mock_repo_class, \
-             patch("app.commands.service.EmergencyStopService") as mock_estop, \
-             patch("app.commands.service.OutboxRepository") as mock_outbox_class:
-
+        with (
+            patch("app.commands.service.get_db_session") as mock_db,
+            patch("app.commands.service.DeviceRepository") as mock_dev_repo_class,
+            patch("app.commands.service.CommandRepository") as mock_repo_class,
+            patch("app.commands.service.EmergencyStopService") as mock_estop,
+            patch("app.commands.service.OutboxRepository") as mock_outbox_class,
+        ):
             # Device setup
             mock_device = MagicMock()
             mock_device.owner_id = owner_id
@@ -70,8 +71,10 @@ class TestCommandPipelineUnit:
 
             # Outbox — capture events added
             mock_outbox = AsyncMock()
+
             async def capture_event(**kwargs):
                 outbox_events.append(kwargs)
+
             mock_outbox.add_event = AsyncMock(side_effect=capture_event)
             mock_outbox_class.return_value = mock_outbox
 
@@ -94,8 +97,9 @@ class TestCommandPipelineUnit:
                     pass  # Command object mock may not fully work, but we check outbox
 
         # An outbox event should have been created for a non-approval command
-        assert any(e.get("event_type") == "command.queued" for e in outbox_events), \
-            "Expected outbox event with event_type='command.queued' to be written"
+        assert any(
+            e.get("event_type") == "command.queued" for e in outbox_events
+        ), "Expected outbox event with event_type='command.queued' to be written"
 
     @pytest.mark.asyncio
     async def test_create_command_no_outbox_for_approval_required(self):
@@ -119,13 +123,14 @@ class TestCommandPipelineUnit:
 
         outbox_events = []
 
-        with patch("app.commands.service.get_db_session") as mock_db, \
-             patch("app.commands.service.DeviceRepository") as mock_dev_repo_class, \
-             patch("app.commands.service.CommandRepository") as mock_repo_class, \
-             patch("app.commands.service.EmergencyStopService") as mock_estop, \
-             patch("app.commands.service.OutboxRepository") as mock_outbox_class, \
-             patch("app.commands.service.command_registry") as mock_registry:
-
+        with (
+            patch("app.commands.service.get_db_session") as mock_db,
+            patch("app.commands.service.DeviceRepository") as mock_dev_repo_class,
+            patch("app.commands.service.CommandRepository") as mock_repo_class,
+            patch("app.commands.service.EmergencyStopService") as mock_estop,
+            patch("app.commands.service.OutboxRepository") as mock_outbox_class,
+            patch("app.commands.service.command_registry") as mock_registry,
+        ):
             mock_device = MagicMock()
             mock_device.owner_id = owner_id
             mock_device.id = device_id
@@ -145,8 +150,10 @@ class TestCommandPipelineUnit:
             mock_estop.return_value = mock_estop_instance
 
             mock_outbox = AsyncMock()
+
             async def capture_event(**kwargs):
                 outbox_events.append(kwargs)
+
             mock_outbox.add_event = AsyncMock(side_effect=capture_event)
             mock_outbox_class.return_value = mock_outbox
 
@@ -176,8 +183,9 @@ class TestCommandPipelineUnit:
                     pass
 
         # No outbox event should be created for approval-required commands
-        assert len(outbox_events) == 0, \
-            "No outbox event should be written for commands awaiting approval"
+        assert (
+            len(outbox_events) == 0
+        ), "No outbox event should be written for commands awaiting approval"
 
 
 class TestApprovalAtomicity:
@@ -199,11 +207,12 @@ class TestApprovalAtomicity:
 
         outbox_events = []
 
-        with patch("app.approvals.service.get_db_session") as mock_db, \
-             patch("app.approvals.service.ApprovalRepository") as mock_repo_class, \
-             patch("app.approvals.service.OutboxRepository") as mock_outbox_class, \
-             patch("app.approvals.service.transition_command", new=AsyncMock()):
-
+        with (
+            patch("app.approvals.service.get_db_session") as mock_db,
+            patch("app.approvals.service.ApprovalRepository") as mock_repo_class,
+            patch("app.approvals.service.OutboxRepository") as mock_outbox_class,
+            patch("app.approvals.service.transition_command", new=AsyncMock()),
+        ):
             # Approval setup
             mock_approval = MagicMock()
             mock_approval.id = approval_id
@@ -227,17 +236,21 @@ class TestApprovalAtomicity:
             decided_approval.decided_at = None
 
             call_count = [0]
+
             async def get_approval_side_effect(aid):
                 call_count[0] += 1
                 if call_count[0] == 1:
                     return mock_approval
                 return decided_approval
+
             mock_repo.get_approval = AsyncMock(side_effect=get_approval_side_effect)
 
             # Outbox
             mock_outbox = AsyncMock()
+
             async def capture_event(**kwargs):
                 outbox_events.append(kwargs)
+
             mock_outbox.add_event = AsyncMock(side_effect=capture_event)
             mock_outbox_class.return_value = mock_outbox
 
@@ -281,5 +294,6 @@ class TestApprovalAtomicity:
             )
 
         # Should have written an outbox event
-        assert any(e.get("event_type") == "command.queued" for e in outbox_events), \
-            "Expected outbox event to be written when approval is APPROVED"
+        assert any(
+            e.get("event_type") == "command.queued" for e in outbox_events
+        ), "Expected outbox event to be written when approval is APPROVED"

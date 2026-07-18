@@ -43,6 +43,7 @@ class DeviceConnection:
         self.protocol_version = "v1"
         self.app_version = ""
         self.gateway_instance_id = str(uuid4())
+        self.violations = 0
 
     async def send_json(self, data: dict) -> bool:
         try:
@@ -80,11 +81,15 @@ class ConnectionManager:
         )
 
     async def unregister(self, device_id: UUID, connection_id: UUID) -> None:
+        # Check Valkey to ensure we don't delete a newer connection's presence on disconnect (old-disconnect race)
+        valkey_conn = await valkey_client.get_hash(f"device:connection:{device_id}")
+        if valkey_conn and valkey_conn.get("connection_id") == str(connection_id):
+            await valkey_client.delete_hash(f"device:connection:{device_id}")
+            await valkey_client.delete(f"device:presence:{device_id}")
+
         conn = self.active_connections.get(device_id)
         if conn and conn.connection_id == connection_id:
             del self.active_connections[device_id]
-            await valkey_client.delete_hash(f"device:connection:{device_id}")
-            await valkey_client.delete(f"device:presence:{device_id}")
 
     def get(self, device_id: UUID) -> Optional[DeviceConnection]:
         return self.active_connections.get(device_id)
@@ -92,12 +97,18 @@ class ConnectionManager:
     def is_connected(self, device_id: UUID) -> bool:
         return device_id in self.active_connections
 
-    async def send_command(self, device_id: UUID, owner_id: UUID, message: CommandRequestMessage) -> bool:
+    async def send_command(
+        self, device_id: UUID, owner_id: UUID, message: CommandRequestMessage
+    ) -> bool:
         """Send command to device — blocks if emergency stop is active for this owner."""
         # GAP-P0-4: Check emergency stop before every send
         estop_active = await valkey_client.get(f"emergency_stop:{owner_id}")
         if estop_active:
-            active = estop_active.get("active", False) if isinstance(estop_active, dict) else bool(estop_active)
+            active = (
+                estop_active.get("active", False)
+                if isinstance(estop_active, dict)
+                else bool(estop_active)
+            )
             if active:
                 logger.warning(
                     "command_blocked_by_emergency_stop",
@@ -112,7 +123,9 @@ class ConnectionManager:
             return False
         return await conn.send_json(message.model_dump(mode="json"))
 
-    async def close_device_connection(self, device_id: UUID, reason: str = "Connection closed by server") -> None:
+    async def close_device_connection(
+        self, device_id: UUID, reason: str = "Connection closed by server"
+    ) -> None:
         """Force-close a device's connection — used by device revocation."""
         conn = self.get(device_id)
         if conn:
@@ -120,7 +133,9 @@ class ConnectionManager:
             await self.unregister(device_id, conn.connection_id)
             logger.info("device_connection_force_closed", device_id=str(device_id), reason=reason)
 
-    async def broadcast_emergency_stop(self, owner_id: UUID, active: bool, reason: str = "") -> None:
+    async def broadcast_emergency_stop(
+        self, owner_id: UUID, active: bool, reason: str = ""
+    ) -> None:
         async with get_db_session() as session:
             repo = DeviceRepository(session)
             devices = await repo.list_devices_by_owner(owner_id)
@@ -194,6 +209,10 @@ async def websocket_endpoint(
 
     No device secret is ever placed in the URL or query string.
     """
+    connection_id = uuid4()
+    server_time = datetime.now(timezone.utc)
+    server_time_iso = server_time.isoformat()
+
     try:
         ProtocolValidator.validate_protocol_version(protocol_version)
     except ProtocolError as e:
@@ -202,15 +221,25 @@ async def websocket_endpoint(
 
     await websocket.accept()
 
-    # Step 1: Send challenge nonce
+    # Step 1: Send challenge nonce along with connection_id and server_time
     nonce = await generate_challenge()
-    await websocket.send_json({"type": "auth_challenge", "nonce": nonce})
+    await websocket.send_json(
+        {
+            "type": "auth_challenge",
+            "nonce": nonce,
+            "connection_id": str(connection_id),
+            "server_time": server_time_iso,
+            "supported_protocols": ["v1"],
+        }
+    )
 
     # Step 2: Wait for auth_response (with timeout)
     try:
         raw = await asyncio.wait_for(websocket.receive_bytes(), timeout=15.0)
     except asyncio.TimeoutError:
-        await websocket.send_json({"type": "error", "code": "AUTH_TIMEOUT", "message": "Authentication timed out"})
+        await websocket.send_json(
+            {"type": "error", "code": "AUTH_TIMEOUT", "message": "Authentication timed out"}
+        )
         await websocket.close(code=4001, reason="Auth timeout")
         return
     except Exception:
@@ -221,12 +250,16 @@ async def websocket_endpoint(
     try:
         auth_data = json.loads(raw.decode("utf-8"))
     except Exception:
-        await websocket.send_json({"type": "error", "code": "INVALID_JSON", "message": "Invalid auth response"})
+        await websocket.send_json(
+            {"type": "error", "code": "INVALID_JSON", "message": "Invalid auth response"}
+        )
         await websocket.close(code=4001, reason="Invalid JSON")
         return
 
     if auth_data.get("type") != "auth_response":
-        await websocket.send_json({"type": "error", "code": "AUTH_FAILED", "message": "Expected auth_response"})
+        await websocket.send_json(
+            {"type": "error", "code": "AUTH_FAILED", "message": "Expected auth_response"}
+        )
         await websocket.close(code=4001, reason="Protocol error")
         return
 
@@ -234,11 +267,14 @@ async def websocket_endpoint(
     signature_b64 = auth_data.get("signature", "")
     client_protocol = auth_data.get("protocol_version", protocol_version)
     client_app_version = auth_data.get("app_version", app_version)
+    auth_server_time = auth_data.get("server_time", server_time_iso)
 
     try:
         device_id = UUID(device_id_str)
     except (ValueError, AttributeError):
-        await websocket.send_json({"type": "error", "code": "AUTH_FAILED", "message": "Invalid device_id"})
+        await websocket.send_json(
+            {"type": "error", "code": "AUTH_FAILED", "message": "Invalid device_id"}
+        )
         await websocket.close(code=4001, reason="Invalid device_id")
         return
 
@@ -247,17 +283,34 @@ async def websocket_endpoint(
         repo = DeviceRepository(session)
         device = await repo.get_device(device_id)
         if not device or device.trust_status != DeviceStatus.TRUSTED or device.revoked_at:
-            await websocket.send_json({"type": "error", "code": "AUTH_FAILED", "message": "Device not found or not trusted"})
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "code": "AUTH_FAILED",
+                    "message": "Device not found or not trusted",
+                }
+            )
             await websocket.close(code=4001, reason="Device not authorized")
             return
         public_key_b64 = device.device_public_identity
         owner_id = device.owner_id
 
-    # Step 5: Challenge-response verification
-    ok, err = await verify_device_challenge_response(device_id, nonce, signature_b64, public_key_b64)
+    # Step 5: Challenge-response verification (with connection parameters)
+    ok, err = await verify_device_challenge_response(
+        device_id=device_id,
+        connection_id=connection_id,
+        nonce=nonce,
+        server_time_iso=auth_server_time,
+        signature_b64=signature_b64,
+        public_key_b64=public_key_b64,
+        protocol_version=client_protocol,
+        app_version=client_app_version,
+    )
     if not ok:
         logger.warning("device_auth_failed", device_id=str(device_id), reason=err)
-        await websocket.send_json({"type": "error", "code": "AUTH_FAILED", "message": "Authentication failed"})
+        await websocket.send_json(
+            {"type": "error", "code": "AUTH_FAILED", "message": "Authentication failed"}
+        )
         await websocket.close(code=4001, reason="Auth failed")
         return
 
@@ -265,7 +318,6 @@ async def websocket_endpoint(
     estop_service = EmergencyStopService()
     emergency_stop_active = await estop_service.is_active(owner_id)
 
-    connection_id = uuid4()
     conn = DeviceConnection(device_id, owner_id, connection_id, websocket)
     conn.protocol_version = client_protocol
     conn.app_version = client_app_version
@@ -303,7 +355,9 @@ async def websocket_endpoint(
                             # GAP-P0-4: Emergency-stop check before delivery
                             is_stopped = await estop_service.is_active(owner_id)
                             if is_stopped:
-                                logger.warning("command_blocked_emergency_stop_gateway", command_id=cmd_id)
+                                logger.warning(
+                                    "command_blocked_emergency_stop_gateway", command_id=cmd_id
+                                )
                                 # NAK to retry later when stop is released
                                 await msg.nak()
                                 continue
@@ -345,6 +399,17 @@ async def websocket_endpoint(
                 await handle_device_message(device_id, owner_id, data)
         except WebSocketDisconnect:
             logger.info("device_disconnected", device_id=str(device_id))
+        except ProtocolError as e:
+            logger.warning(
+                "protocol_error_ws_endpoint",
+                device_id=str(device_id),
+                code=e.code,
+                message=e.message,
+            )
+            if e.code == "MESSAGE_TOO_LARGE":
+                await websocket.close(code=1009, reason=e.message)
+            else:
+                await websocket.close(code=4000, reason=e.message)
         except Exception as e:
             logger.exception("websocket_error", device_id=str(device_id), error=str(e))
         finally:
@@ -381,49 +446,71 @@ async def handle_device_message(device_id: UUID, owner_id: UUID, data: bytes) ->
         elif msg.type == "acknowledge":
             # GAP-P1-2: Verify command belongs to this device before processing
             if not await _command_belongs_to_device(msg.command_id, device_id):
-                logger.warning("ack_command_ownership_mismatch", command_id=str(msg.command_id), device_id=str(device_id))
+                logger.warning(
+                    "ack_command_ownership_mismatch",
+                    command_id=str(msg.command_id),
+                    device_id=str(device_id),
+                )
                 return
             await nats_client.publish(
                 subjects.command_acknowledged(str(msg.command_id)),
-                json.dumps({
-                    "command_id": str(msg.command_id),
-                    "device_id": str(device_id),
-                    "accepted": msg.accepted,
-                    "rejection_reason": getattr(msg, "rejection_reason", None),
-                }).encode(),
+                json.dumps(
+                    {
+                        "command_id": str(msg.command_id),
+                        "device_id": str(device_id),
+                        "accepted": msg.accepted,
+                        "rejection_reason": getattr(msg, "rejection_reason", None),
+                    }
+                ).encode(),
             )
 
         elif msg.type == "progress":
             if not await _command_belongs_to_device(msg.command_id, device_id):
-                logger.warning("progress_command_ownership_mismatch", command_id=str(msg.command_id), device_id=str(device_id))
+                logger.warning(
+                    "progress_command_ownership_mismatch",
+                    command_id=str(msg.command_id),
+                    device_id=str(device_id),
+                )
                 return
             await nats_client.publish(
                 subjects.command_progress(str(msg.command_id)),
-                json.dumps({
-                    "command_id": str(msg.command_id),
-                    "device_id": str(device_id),
-                    "progress_percent": getattr(msg, "progress_percent", None),
-                    "stage": getattr(msg, "stage", None),
-                }).encode(),
+                json.dumps(
+                    {
+                        "command_id": str(msg.command_id),
+                        "device_id": str(device_id),
+                        "progress_percent": getattr(msg, "progress_percent", None),
+                        "stage": getattr(msg, "stage", None),
+                    }
+                ).encode(),
             )
 
         elif msg.type == "result":
             # GAP-P1-2: Verify command belongs to this device
             if not await _command_belongs_to_device(msg.command_id, device_id):
-                logger.warning("result_command_ownership_mismatch", command_id=str(msg.command_id), device_id=str(device_id))
+                logger.warning(
+                    "result_command_ownership_mismatch",
+                    command_id=str(msg.command_id),
+                    device_id=str(device_id),
+                )
                 return
             await nats_client.publish(
                 subjects.command_result(str(msg.command_id)),
-                json.dumps({
-                    "command_id": str(msg.command_id),
-                    "device_id": str(device_id),
-                    "success": msg.success,
-                    "result_data": getattr(msg, "result_data", None),
-                    "error_code": getattr(msg, "error_code", None),
-                    "error_message": getattr(msg, "error_message", None),
-                    "started_at": msg.started_at.isoformat() if hasattr(msg, "started_at") and msg.started_at else None,
-                    "finished_at": msg.finished_at.isoformat() if hasattr(msg, "finished_at") and msg.finished_at else None,
-                }).encode(),
+                json.dumps(
+                    {
+                        "command_id": str(msg.command_id),
+                        "device_id": str(device_id),
+                        "success": msg.success,
+                        "result_data": getattr(msg, "result_data", None),
+                        "error_code": getattr(msg, "error_code", None),
+                        "error_message": getattr(msg, "error_message", None),
+                        "started_at": msg.started_at.isoformat()
+                        if hasattr(msg, "started_at") and msg.started_at
+                        else None,
+                        "finished_at": msg.finished_at.isoformat()
+                        if hasattr(msg, "finished_at") and msg.finished_at
+                        else None,
+                    }
+                ).encode(),
             )
 
         elif msg.type == "status_update":
@@ -437,6 +524,12 @@ async def handle_device_message(device_id: UUID, owner_id: UUID, data: bytes) ->
 
     except ProtocolError as e:
         logger.warning("protocol_error", device_id=str(device_id), code=e.code, message=e.message)
+        conn = connection_manager.get(device_id)
+        if conn:
+            conn.violations += 1
+            if conn.violations >= 5:
+                logger.error("max_protocol_violations_exceeded", device_id=str(device_id))
+                await conn.close(code=4005, reason="Too many protocol violations")
     except Exception as e:
         logger.exception("message_handling_error", device_id=str(device_id), error=str(e))
 
@@ -490,9 +583,12 @@ async def readiness():
         checks["nats"] = "not_ready"
     all_ready = all(v == "ready" for v in checks.values())
     # GAP-P0-7: Return 503 when not ready
-    return JSONResponse(content={"ready": all_ready, "checks": checks}, status_code=200 if all_ready else 503)
+    return JSONResponse(
+        content={"ready": all_ready, "checks": checks}, status_code=200 if all_ready else 503
+    )
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8001)

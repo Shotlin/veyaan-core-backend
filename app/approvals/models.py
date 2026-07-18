@@ -20,12 +20,28 @@ class Approval(Base):
     __tablename__ = "approvals"
 
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
-    command_id = Column(PG_UUID(as_uuid=True), ForeignKey("commands.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
-    owner_id = Column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    command_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("commands.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    owner_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     risk_level = Column(String(20), nullable=False)
     action_title = Column(String(255), nullable=False)
     action_description = Column(Text, nullable=False)
-    status = Column(SQLEnum(ApprovalStatus, create_constraint=False, native_enum=False), nullable=False, default=ApprovalStatus.PENDING, index=True)
+    status = Column(
+        SQLEnum(ApprovalStatus, create_constraint=False, native_enum=False),
+        nullable=False,
+        default=ApprovalStatus.PENDING,
+        index=True,
+    )
     decision_nonce_hash = Column(String(64), nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
     decided_at = Column(DateTime(timezone=True), nullable=True)

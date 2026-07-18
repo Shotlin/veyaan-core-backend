@@ -20,7 +20,9 @@ async def get_device_service() -> DeviceService:
     return DeviceService()
 
 
-@router.post("/pair", response_model=ApiResponse[DevicePairingResponse], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/pair", response_model=ApiResponse[DevicePairingResponse], status_code=status.HTTP_201_CREATED
+)
 async def start_pairing(
     request: DevicePairingRequest,
     service: DeviceService = Depends(get_device_service),
@@ -64,17 +66,21 @@ async def get_device(
         device = await repo.get_device(device_id)
         if not device or str(device.owner_id) != str(current_user.id):
             raise ApiError(ErrorCode.DEVICE_NOT_FOUND, "Device not found", status_code=404)
-        return ApiResponse(data=DeviceResponse(
-            id=device.id,
-            display_name=device.display_name,
-            device_type=device.device_type,
-            operating_system=device.operating_system,
-            app_version=device.app_version,
-            protocol_version=device.protocol_version,
-            trust_status=device.trust_status.value if hasattr(device.trust_status, 'value') else device.trust_status,
-            last_seen_at=device.last_seen_at,
-            created_at=device.created_at,
-        ))
+        return ApiResponse(
+            data=DeviceResponse(
+                id=device.id,
+                display_name=device.display_name,
+                device_type=device.device_type,
+                operating_system=device.operating_system,
+                app_version=device.app_version,
+                protocol_version=device.protocol_version,
+                trust_status=device.trust_status.value
+                if hasattr(device.trust_status, "value")
+                else device.trust_status,
+                last_seen_at=device.last_seen_at,
+                created_at=device.created_at,
+            )
+        )
 
 
 @router.delete("/{device_id}", response_model=ApiResponse[dict])

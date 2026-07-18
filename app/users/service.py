@@ -19,7 +19,7 @@ class UserService:
                 user = await repo.create(
                     supabase_user_id=claims.sub,
                     display_name=claims.user_metadata.get("full_name") or claims.email,
-                    email=claims.email
+                    email=claims.email,
                 )
             return user
 

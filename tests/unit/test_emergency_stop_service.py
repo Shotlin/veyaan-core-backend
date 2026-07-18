@@ -8,7 +8,6 @@ import pytest
 
 
 class TestEmergencyStopService:
-
     @pytest.mark.asyncio
     async def test_is_active_returns_true_from_valkey_cache(self):
         from app.emergency_stop.service import EmergencyStopService
@@ -43,9 +42,10 @@ class TestEmergencyStopService:
         mock_stop.active = True
         mock_stop.activated_at = datetime.now(timezone.utc)
 
-        with patch("app.emergency_stop.service.valkey_client") as mock_valkey, \
-             patch("app.emergency_stop.service.get_db_session") as mock_db:
-
+        with (
+            patch("app.emergency_stop.service.valkey_client") as mock_valkey,
+            patch("app.emergency_stop.service.get_db_session") as mock_db,
+        ):
             mock_valkey.get = AsyncMock(return_value=None)
             mock_valkey.set = AsyncMock()
 
@@ -74,11 +74,12 @@ class TestEmergencyStopService:
         mock_stop.active = True
         mock_stop.activated_at = datetime.now(timezone.utc)
 
-        with patch("app.emergency_stop.service.valkey_client") as mock_valkey, \
-             patch("app.emergency_stop.service.get_db_session") as mock_db, \
-             patch("app.emergency_stop.service.AuditService") as mock_audit_class, \
-             patch("app.emergency_stop.service.nats_client") as mock_nats:
-
+        with (
+            patch("app.emergency_stop.service.valkey_client") as mock_valkey,
+            patch("app.emergency_stop.service.get_db_session") as mock_db,
+            patch("app.emergency_stop.service.AuditService") as mock_audit_class,
+            patch("app.emergency_stop.service.nats_client") as mock_nats,
+        ):
             mock_audit = AsyncMock()
             mock_audit_class.return_value = mock_audit
 
@@ -113,11 +114,12 @@ class TestEmergencyStopService:
         mock_stop = MagicMock()
         mock_stop.active = True
 
-        with patch("app.emergency_stop.service.valkey_client") as mock_valkey, \
-             patch("app.emergency_stop.service.get_db_session") as mock_db, \
-             patch("app.emergency_stop.service.AuditService") as mock_audit_class, \
-             patch("app.emergency_stop.service.nats_client") as mock_nats:
-
+        with (
+            patch("app.emergency_stop.service.valkey_client") as mock_valkey,
+            patch("app.emergency_stop.service.get_db_session") as mock_db,
+            patch("app.emergency_stop.service.AuditService") as mock_audit_class,
+            patch("app.emergency_stop.service.nats_client") as mock_nats,
+        ):
             mock_audit = AsyncMock()
             mock_audit_class.return_value = mock_audit
 

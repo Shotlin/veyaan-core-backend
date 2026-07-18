@@ -19,6 +19,7 @@ from app.commands.state_machine import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_command(state: CommandState):
     """Return a mock Command object in a given state."""
     cmd = MagicMock()
@@ -51,8 +52,8 @@ def _make_session(command):
 # Allowed transitions
 # ---------------------------------------------------------------------------
 
-class TestAllowedTransitions:
 
+class TestAllowedTransitions:
     @pytest.mark.asyncio
     async def test_received_to_validated(self):
         cmd = _make_command(CommandState.RECEIVED)
@@ -135,8 +136,8 @@ class TestAllowedTransitions:
 # Denied / invalid transitions
 # ---------------------------------------------------------------------------
 
-class TestDeniedTransitions:
 
+class TestDeniedTransitions:
     @pytest.mark.asyncio
     async def test_rejected_cannot_move_to_queued(self):
         cmd = _make_command(CommandState.REJECTED)
@@ -184,8 +185,8 @@ class TestDeniedTransitions:
 # Terminal state coverage
 # ---------------------------------------------------------------------------
 
-class TestTerminalStates:
 
+class TestTerminalStates:
     def test_terminal_states_are_correct(self):
         assert CommandState.SUCCEEDED in TERMINAL_STATES
         assert CommandState.FAILED in TERMINAL_STATES

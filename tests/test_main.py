@@ -29,13 +29,16 @@ def test_root():
 
 
 def test_devices_pair_endpoint_exists():
-    response = client.post("/v1/devices/pair", json={
-        "display_name": "Test MacBook",
-        "device_type": "macbook",
-        "operating_system": "macOS 14.0",
-        "app_version": "1.0.0",
-        "device_public_identity": "test-key-123",
-    })
+    response = client.post(
+        "/v1/devices/pair",
+        json={
+            "display_name": "Test MacBook",
+            "device_type": "macbook",
+            "operating_system": "macOS 14.0",
+            "app_version": "1.0.0",
+            "device_public_identity": "test-key-123",
+        },
+    )
     assert response.status_code in [401, 500]
 
 
@@ -55,17 +58,22 @@ def test_devices_revoke_endpoint_exists():
 
 
 def test_devices_confirm_pair_endpoint_exists():
-    response = client.post(f"/v1/devices/pair/{uuid4()}/confirm", json={"pairing_code": "test-code"})
+    response = client.post(
+        f"/v1/devices/pair/{uuid4()}/confirm", json={"pairing_code": "test-code"}
+    )
     assert response.status_code == 401
 
 
 def test_commands_create_requires_auth():
-    response = client.post("/v1/commands", json={
-        "device_id": str(uuid4()),
-        "command_type": "system.ping",
-        "parameters": {},
-        "idempotency_key": "test-key",
-    })
+    response = client.post(
+        "/v1/commands",
+        json={
+            "device_id": str(uuid4()),
+            "command_type": "system.ping",
+            "parameters": {},
+            "idempotency_key": "test-key",
+        },
+    )
     assert response.status_code == 401
 
 
@@ -105,18 +113,24 @@ def test_approvals_get_requires_auth():
 
 
 def test_approvals_approve_requires_auth():
-    response = client.post(f"/v1/approvals/{uuid4()}/approve", json={
-        "decision": "approve",
-        "nonce": "test-nonce",
-    })
+    response = client.post(
+        f"/v1/approvals/{uuid4()}/approve",
+        json={
+            "decision": "approve",
+            "nonce": "test-nonce",
+        },
+    )
     assert response.status_code == 401
 
 
 def test_approvals_reject_requires_auth():
-    response = client.post(f"/v1/approvals/{uuid4()}/reject", json={
-        "decision": "reject",
-        "nonce": "test-nonce",
-    })
+    response = client.post(
+        f"/v1/approvals/{uuid4()}/reject",
+        json={
+            "decision": "reject",
+            "nonce": "test-nonce",
+        },
+    )
     assert response.status_code == 401
 
 
@@ -126,10 +140,13 @@ def test_emergency_stop_status_requires_auth():
 
 
 def test_emergency_stop_activate_requires_auth():
-    response = client.post("/v1/emergency-stop/activate", json={
-        "reason": "test",
-        "confirmation": "ACTIVATE_EMERGENCY_STOP",
-    })
+    response = client.post(
+        "/v1/emergency-stop/activate",
+        json={
+            "reason": "test",
+            "confirmation": "ACTIVATE_EMERGENCY_STOP",
+        },
+    )
     assert response.status_code == 401
 
 
@@ -160,12 +177,15 @@ def test_health_detail_requires_auth():
 
 def test_unknown_command_type_rejected():
     """Test that unknown command types return 422."""
-    response = client.post("/v1/commands", json={
-        "device_id": str(uuid4()),
-        "command_type": "nonexistent.command",
-        "parameters": {},
-        "idempotency_key": "test-key",
-    })
+    response = client.post(
+        "/v1/commands",
+        json={
+            "device_id": str(uuid4()),
+            "command_type": "nonexistent.command",
+            "parameters": {},
+            "idempotency_key": "test-key",
+        },
+    )
     assert response.status_code == 401
 
 

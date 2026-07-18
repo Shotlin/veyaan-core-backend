@@ -11,7 +11,6 @@ import pytest
 
 
 class TestCrossOwnerIsolation:
-
     @pytest.mark.asyncio
     async def test_user_cannot_cancel_another_users_command(self):
         """cancel_command must return False when owner_id doesn't match."""
@@ -27,9 +26,10 @@ class TestCrossOwnerIsolation:
         mock_device.owner_id = user_b
         mock_command.device = mock_device
 
-        with patch("app.commands.service.get_db_session") as mock_db, \
-             patch("app.commands.service.CommandRepository") as mock_repo_class:
-
+        with (
+            patch("app.commands.service.get_db_session") as mock_db,
+            patch("app.commands.service.CommandRepository") as mock_repo_class,
+        ):
             mock_repo = AsyncMock()
             mock_repo.get_by_id = AsyncMock(return_value=mock_command)
             mock_repo_class.return_value = mock_repo
@@ -54,9 +54,10 @@ class TestCrossOwnerIsolation:
         uuid4()
         device_id = uuid4()
 
-        with patch("app.devices.service.get_db_session") as mock_db, \
-             patch("app.devices.service.DeviceRepository") as mock_repo_class:
-
+        with (
+            patch("app.devices.service.get_db_session") as mock_db,
+            patch("app.devices.service.DeviceRepository") as mock_repo_class,
+        ):
             mock_repo = AsyncMock()
             # revoke returns False when owner doesn't match
             mock_repo.revoke_device = AsyncMock(return_value=False)
@@ -87,9 +88,10 @@ class TestCrossOwnerIsolation:
         mock_device.owner_id = user_b
         mock_command.device = mock_device
 
-        with patch("app.commands.service.get_db_session") as mock_db, \
-             patch("app.commands.service.CommandRepository") as mock_repo_class:
-
+        with (
+            patch("app.commands.service.get_db_session") as mock_db,
+            patch("app.commands.service.CommandRepository") as mock_repo_class,
+        ):
             mock_repo = AsyncMock()
             mock_repo.get_by_id = AsyncMock(return_value=mock_command)
             mock_repo_class.return_value = mock_repo
@@ -117,9 +119,10 @@ class TestCrossOwnerIsolation:
         mock_approval = MagicMock()
         mock_approval.owner_id = user_b
 
-        with patch("app.approvals.service.get_db_session") as mock_db, \
-             patch("app.approvals.service.ApprovalRepository") as mock_repo_class:
-
+        with (
+            patch("app.approvals.service.get_db_session") as mock_db,
+            patch("app.approvals.service.ApprovalRepository") as mock_repo_class,
+        ):
             mock_repo = AsyncMock()
             mock_repo.get_approval = AsyncMock(return_value=mock_approval)
             mock_repo_class.return_value = mock_repo

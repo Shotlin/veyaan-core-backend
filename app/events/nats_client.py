@@ -14,7 +14,9 @@ class NatsClient:
         self.js: Optional[JetStreamContext] = None
 
     async def connect(self):
-        self.nc = await nats.connect(settings.NATS_URL, reconnect_timewait=2, max_reconnect_attempts=-1)
+        self.nc = await nats.connect(
+            settings.NATS_URL, reconnect_timewait=2, max_reconnect_attempts=-1
+        )
         self.js = self.nc.jetstream()
         await self._ensure_streams()
 
@@ -76,7 +78,13 @@ class NatsClient:
             await self.nc.drain()
             await self.nc.close()
 
-    async def publish_js(self, subject: str, payload: dict, message_id: Optional[str] = None, headers: Optional[dict] = None) -> None:
+    async def publish_js(
+        self,
+        subject: str,
+        payload: dict,
+        message_id: Optional[str] = None,
+        headers: Optional[dict] = None,
+    ) -> None:
         if not self.js:
             raise RuntimeError("JetStream not connected")
         nats_headers = {}

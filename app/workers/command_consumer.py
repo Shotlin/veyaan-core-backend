@@ -77,7 +77,10 @@ class CommandLifecycleConsumer:
                 success = payload.get("success", False)
                 if success:
                     await transition_command(
-                        session, command_id, CommandState.SUCCEEDED, "device",
+                        session,
+                        command_id,
+                        CommandState.SUCCEEDED,
+                        "device",
                         metadata={
                             "result_data": payload.get("result_data"),
                             "result_summary": "success" if success else "failed",
@@ -85,7 +88,10 @@ class CommandLifecycleConsumer:
                     )
                 else:
                     await transition_command(
-                        session, command_id, CommandState.FAILED, "device",
+                        session,
+                        command_id,
+                        CommandState.FAILED,
+                        "device",
                         metadata={
                             "error_code": payload.get("error_code"),
                             "error_message": payload.get("error_message"),
@@ -97,7 +103,8 @@ class CommandLifecycleConsumer:
                 if task:
                     new_state = TaskState.SUCCEEDED if success else TaskState.FAILED
                     await task_service.update_task_state(
-                        task.id, new_state,
+                        task.id,
+                        new_state,
                         result_summary="success" if success else "failed",
                         error_code=payload.get("error_code"),
                         error_message=payload.get("error_message"),
@@ -106,10 +113,17 @@ class CommandLifecycleConsumer:
             elif "acknowledged" in subject:
                 accepted = payload.get("accepted", True)
                 if accepted:
-                    await transition_command(session, command_id, CommandState.ACKNOWLEDGED, "device")
+                    await transition_command(
+                        session, command_id, CommandState.ACKNOWLEDGED, "device"
+                    )
                 else:
-                    await transition_command(session, command_id, CommandState.FAILED, "device",
-                                             metadata={"error_message": payload.get("rejection_reason")})
+                    await transition_command(
+                        session,
+                        command_id,
+                        CommandState.FAILED,
+                        "device",
+                        metadata={"error_message": payload.get("rejection_reason")},
+                    )
 
             elif "progress" in subject:
                 if command.state == CommandState.ACKNOWLEDGED.value:

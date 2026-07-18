@@ -8,7 +8,6 @@ from app.utils.clock import FakeClock, SystemClock
 
 
 class TestFakeClock:
-
     def test_returns_fixed_time(self):
         t = datetime(2026, 7, 18, 12, 0, 0, tzinfo=timezone.utc)
         clock = FakeClock(t)
@@ -60,7 +59,6 @@ class TestFakeClock:
 
 
 class TestSystemClock:
-
     def test_returns_utc_aware_datetime(self):
         clock = SystemClock()
         now = clock.now()

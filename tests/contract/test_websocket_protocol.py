@@ -12,7 +12,6 @@ import pytest
 
 
 class TestWebSocketProtocolContract:
-
     @pytest.mark.asyncio
     async def test_unsupported_protocol_version_rejected(self):
         """

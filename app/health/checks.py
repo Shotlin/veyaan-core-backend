@@ -47,20 +47,13 @@ class HealthChecker:
             checks["valkey"] = {"status": "not_ready", "error": str(e)}
             all_ready = False
 
-        return {
-            "ready": all_ready,
-            "checks": checks
-        }
+        return {"ready": all_ready, "checks": checks}
 
     async def check_detailed(self) -> dict[str, Any]:
         readiness = await self.check_readiness()
 
         # Add more detailed info
-        detailed = {
-            **readiness,
-            "service": "veyaan-api",
-            "version": "0.1.0"
-        }
+        detailed = {**readiness, "service": "veyaan-api", "version": "0.1.0"}
 
         # NATS streams info
         try:

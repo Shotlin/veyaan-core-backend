@@ -86,7 +86,9 @@ class Settings(BaseSettings):
     OTEL_EXPORTER_OTLP_ENDPOINT: str = ""
     SENTRY_DSN: str = ""
 
-    @field_validator("ALLOWED_ORIGINS", "WS_SUPPORTED_PROTOCOLS", "TRUSTED_PROXY_IPS", mode="before")
+    @field_validator(
+        "ALLOWED_ORIGINS", "WS_SUPPORTED_PROTOCOLS", "TRUSTED_PROXY_IPS", mode="before"
+    )
     @classmethod
     def parse_list_fields(cls, v):
         return parse_list(v)

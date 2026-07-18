@@ -141,9 +141,7 @@ class SchedulerWorker:
                 async with get_db_session() as session:
                     for device_id in stale_device_ids:
                         await session.execute(
-                            update(Device)
-                            .where(Device.id == device_id)
-                            .values(last_seen_at=now)
+                            update(Device).where(Device.id == device_id).values(last_seen_at=now)
                         )
                     await session.commit()
                 stale_count = len(stale_device_ids)

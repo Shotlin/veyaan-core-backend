@@ -44,9 +44,7 @@ class ApprovalRepository:
         return approval, decision_nonce
 
     async def get_approval(self, approval_id: UUID) -> Optional[Approval]:
-        result = await self.session.execute(
-            select(Approval).where(Approval.id == approval_id)
-        )
+        result = await self.session.execute(select(Approval).where(Approval.id == approval_id))
         return result.scalar_one_or_none()
 
     async def list_approvals(
@@ -112,7 +110,9 @@ class ApprovalRepository:
             return False, "Invalid decision nonce"
 
         # Update approval
-        approval.status = ApprovalStatus.APPROVED if decision == "approve" else ApprovalStatus.REJECTED
+        approval.status = (
+            ApprovalStatus.APPROVED if decision == "approve" else ApprovalStatus.REJECTED
+        )
         approval.decided_at = datetime.now(timezone.utc)
         approval.decision_note = note
 

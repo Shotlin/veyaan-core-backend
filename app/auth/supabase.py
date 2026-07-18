@@ -38,7 +38,7 @@ class SupabaseAuth:
                 key,
                 algorithms=["RS256"],
                 audience="authenticated",
-                issuer=f"{settings.SUPABASE_URL}/auth/v1"
+                issuer=f"{settings.SUPABASE_URL}/auth/v1",
             )
             return TokenClaims(**payload)
         except jwt.ExpiredSignatureError:

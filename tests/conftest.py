@@ -18,6 +18,7 @@ import pytest
 # Event loop configuration (single event loop for entire test session)
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="session")
 def event_loop_policy():
     return asyncio.DefaultEventLoopPolicy()
@@ -27,13 +28,10 @@ def event_loop_policy():
 # Integration test skip marker
 # ---------------------------------------------------------------------------
 
+
 def is_integration_env() -> bool:
     """True when real service connections are available."""
-    return bool(
-        os.getenv("DATABASE_URL")
-        and os.getenv("NATS_URL")
-        and os.getenv("VALKEY_URL")
-    )
+    return bool(os.getenv("DATABASE_URL") and os.getenv("NATS_URL") and os.getenv("VALKEY_URL"))
 
 
 skip_if_no_services = pytest.mark.skipif(
@@ -45,6 +43,7 @@ skip_if_no_services = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 # Common mock factories (unit tests)
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def mock_valkey():

@@ -19,7 +19,7 @@ class DeviceRepository:
         operating_system: str,
         app_version: str,
         device_public_identity: str,
-        protocol_version: str = "v1"
+        protocol_version: str = "v1",
     ) -> PairingRequest:
         pairing_code, code_hash = Device.generate_pairing_code()
 
@@ -35,7 +35,7 @@ class DeviceRepository:
             protocol_version=protocol_version,
             device_public_identity=device_public_identity,
             pairing_code_hash=code_hash,
-            expires_at=expires_at
+            expires_at=expires_at,
         )
 
         # Store raw pairing code temporarily for response
@@ -52,7 +52,9 @@ class DeviceRepository:
         )
         return result.scalar_one_or_none()
 
-    async def confirm_pairing(self, pairing_id: UUID, owner_id: UUID) -> tuple[Optional[Device], Optional[str]]:
+    async def confirm_pairing(
+        self, pairing_id: UUID, owner_id: UUID
+    ) -> tuple[Optional[Device], Optional[str]]:
         pairing = await self.get_pairing_request(pairing_id)
 
         if not pairing:
@@ -78,7 +80,7 @@ class DeviceRepository:
             app_version=pairing.app_version,
             protocol_version=pairing.protocol_version,
             device_public_identity=pairing.device_public_identity,
-            trust_status=DeviceStatus.TRUSTED
+            trust_status=DeviceStatus.TRUSTED,
         )
 
         self.session.add(device)
@@ -88,9 +90,7 @@ class DeviceRepository:
         device_credential = DeviceCredential(
             device_id=device.id,
             credential_hash=credential_hash,
-            expires_at=datetime.now(timezone.utc).replace(
-                year=datetime.now(timezone.utc).year + 1
-            )
+            expires_at=datetime.now(timezone.utc).replace(year=datetime.now(timezone.utc).year + 1),
         )
 
         self.session.add(device_credential)
@@ -107,23 +107,17 @@ class DeviceRepository:
 
     async def list_devices_by_owner(self, owner_id: UUID) -> list[Device]:
         result = await self.session.execute(
-            select(Device)
-            .where(Device.owner_id == owner_id)
-            .order_by(Device.created_at.desc())
+            select(Device).where(Device.owner_id == owner_id).order_by(Device.created_at.desc())
         )
         return list(result.scalars().all())
 
     async def get_device(self, device_id: UUID) -> Optional[Device]:
-        result = await self.session.execute(
-            select(Device).where(Device.id == device_id)
-        )
+        result = await self.session.execute(select(Device).where(Device.id == device_id))
         return result.scalar_one_or_none()
 
     async def revoke_device(self, device_id: UUID, owner_id: UUID) -> bool:
         result = await self.session.execute(
-            select(Device).where(
-                and_(Device.id == device_id, Device.owner_id == owner_id)
-            )
+            select(Device).where(and_(Device.id == device_id, Device.owner_id == owner_id))
         )
         device = result.scalar_one_or_none()
 
@@ -150,7 +144,7 @@ class DeviceRepository:
                 and_(
                     DeviceCredential.device_id == device_id,
                     DeviceCredential.revoked_at.is_(None),
-                    DeviceCredential.expires_at > datetime.now(timezone.utc)
+                    DeviceCredential.expires_at > datetime.now(timezone.utc),
                 )
             )
             .order_by(DeviceCredential.created_at.desc())

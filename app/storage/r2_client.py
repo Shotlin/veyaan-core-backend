@@ -35,17 +35,21 @@ class R2Client:
 
         try:
             from app.config import settings
-            if not all([
-                getattr(settings, "R2_ACCESS_KEY_ID", None),
-                getattr(settings, "R2_SECRET_ACCESS_KEY", None),
-                getattr(settings, "R2_ENDPOINT_URL", None),
-                getattr(settings, "R2_BUCKET_NAME", None),
-            ]):
+
+            if not all(
+                [
+                    getattr(settings, "R2_ACCESS_KEY_ID", None),
+                    getattr(settings, "R2_SECRET_ACCESS_KEY", None),
+                    getattr(settings, "R2_ENDPOINT_URL", None),
+                    getattr(settings, "R2_BUCKET_NAME", None),
+                ]
+            ):
                 logger.info("R2 storage disabled — credentials not configured")
                 self._enabled = False
                 return False
 
             import boto3
+
             self._client = boto3.client(
                 "s3",
                 endpoint_url=settings.R2_ENDPOINT_URL,
@@ -62,7 +66,9 @@ class R2Client:
 
         return self._enabled
 
-    def upload_file(self, key: str, data: bytes, content_type: str = "application/octet-stream") -> bool:
+    def upload_file(
+        self, key: str, data: bytes, content_type: str = "application/octet-stream"
+    ) -> bool:
         """Upload bytes to R2. Returns True on success, False if R2 is disabled/failed."""
         if not self._ensure_client():
             return False

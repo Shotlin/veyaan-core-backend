@@ -21,7 +21,9 @@ class CommandService:
     def __init__(self):
         pass
 
-    async def create_command(self, request: CreateCommandRequest, owner_id: UUID) -> CreateCommandResponse:
+    async def create_command(
+        self, request: CreateCommandRequest, owner_id: UUID
+    ) -> CreateCommandResponse:
         async with get_db_session() as session:
             repo = CommandRepository(session)
             device_repo = DeviceRepository(session)
@@ -35,7 +37,11 @@ class CommandService:
 
             emergency_stop_service = EmergencyStopService()
             if await emergency_stop_service.is_active(owner_id):
-                raise ApiError(ErrorCode.EMERGENCY_STOP_ACTIVE, "Emergency stop is active. Cannot create new commands.", status_code=423)
+                raise ApiError(
+                    ErrorCode.EMERGENCY_STOP_ACTIVE,
+                    "Emergency stop is active. Cannot create new commands.",
+                    status_code=423,
+                )
 
             existing = await repo.get_by_idempotency_key(request.device_id, request.idempotency_key)
             if existing:
@@ -56,7 +62,11 @@ class CommandService:
 
             definition = command_registry.get(request.command_type)
             if not definition:
-                raise ApiError(ErrorCode.INVALID_COMMAND_TYPE, f"Unknown command type: {request.command_type}", status_code=422)
+                raise ApiError(
+                    ErrorCode.INVALID_COMMAND_TYPE,
+                    f"Unknown command type: {request.command_type}",
+                    status_code=422,
+                )
 
             definition.parameter_schema(**request.parameters)
 
@@ -71,7 +81,8 @@ class CommandService:
                 idempotency_key=request.idempotency_key,
                 state=initial_state.value,
                 requires_approval=requires_approval,
-                delayed_execution_allowed=request.delayed_execution_allowed or definition.delayed_execution_allowed,
+                delayed_execution_allowed=request.delayed_execution_allowed
+                or definition.delayed_execution_allowed,
                 expires_at=request.expires_at,
             )
             session.add(command)
@@ -106,7 +117,9 @@ class CommandService:
                         "device_id": str(device.id),
                         "command_type": command.command_type,
                         "parameters": command.parameters,
-                        "expires_at": command.expires_at.isoformat() if command.expires_at else None,
+                        "expires_at": command.expires_at.isoformat()
+                        if command.expires_at
+                        else None,
                         "risk_level": command.risk_level,
                     },
                 )
@@ -205,12 +218,21 @@ class TaskService:
             result = await session.execute(select(Task).where(Task.command_id == command_id))
             return result.scalar_one_or_none()
 
-    async def update_task_state(self, task_id: UUID, state: TaskState, result_summary: str = None, error_code: str = None, error_message: str = None):
+    async def update_task_state(
+        self,
+        task_id: UUID,
+        state: TaskState,
+        result_summary: str = None,
+        error_code: str = None,
+        error_message: str = None,
+    ):
         async with get_db_session() as session:
             values = {
                 "state": state.value,
                 "started_at": datetime.now(timezone.utc) if state == TaskState.RUNNING else None,
-                "finished_at": datetime.now(timezone.utc) if state in (TaskState.SUCCEEDED, TaskState.FAILED, TaskState.CANCELLED) else None,
+                "finished_at": datetime.now(timezone.utc)
+                if state in (TaskState.SUCCEEDED, TaskState.FAILED, TaskState.CANCELLED)
+                else None,
                 "result_summary": result_summary,
                 "error_code": error_code,
                 "error_message": error_message,
@@ -220,9 +242,5 @@ class TaskService:
                 current_attempt = result.scalar_one_or_none()
                 values["attempt_count"] = (current_attempt or 0) + 1
 
-            await session.execute(
-                update(Task)
-                .where(Task.id == task_id)
-                .values(**values)
-            )
+            await session.execute(update(Task).where(Task.id == task_id).values(**values))
             await session.commit()

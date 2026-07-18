@@ -13,6 +13,7 @@ import pytest
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_claims(sub: str = None, email: str = "test@example.com"):
     claims = MagicMock()
     claims.sub = sub or str(uuid4())
@@ -34,12 +35,13 @@ def _make_user(status: str = "active"):
 # Token validation
 # ---------------------------------------------------------------------------
 
-class TestGetCurrentToken:
 
+class TestGetCurrentToken:
     @pytest.mark.asyncio
     async def test_missing_credentials_raises_401(self):
         from app.api.errors import ApiError
         from app.auth.dependencies import get_current_token
+
         with pytest.raises(ApiError) as exc_info:
             await get_current_token(credentials=None)
         assert exc_info.value.status_code == 401
@@ -47,6 +49,7 @@ class TestGetCurrentToken:
     @pytest.mark.asyncio
     async def test_valid_credentials_returns_token(self):
         from app.auth.dependencies import get_current_token
+
         creds = MagicMock()
         creds.credentials = "valid-jwt-token"
         result = await get_current_token(credentials=creds)
@@ -57,8 +60,8 @@ class TestGetCurrentToken:
 # User context resolution
 # ---------------------------------------------------------------------------
 
-class TestGetCurrentUserContext:
 
+class TestGetCurrentUserContext:
     @pytest.mark.asyncio
     async def test_valid_token_returns_user_context(self):
         from app.auth.dependencies import get_current_user_context
@@ -67,9 +70,10 @@ class TestGetCurrentUserContext:
         claims = _make_claims()
         user = _make_user("active")
 
-        with patch("app.auth.dependencies.supabase_auth") as mock_auth, \
-             patch("app.auth.dependencies.UserRepository") as mock_repo_class:
-
+        with (
+            patch("app.auth.dependencies.supabase_auth") as mock_auth,
+            patch("app.auth.dependencies.UserRepository") as mock_repo_class,
+        ):
             mock_auth.verify_token = AsyncMock(return_value=claims)
             mock_repo = AsyncMock()
             mock_repo.get_by_supabase_id = AsyncMock(return_value=user)
@@ -91,9 +95,10 @@ class TestGetCurrentUserContext:
         claims = _make_claims()
         new_user = _make_user("active")
 
-        with patch("app.auth.dependencies.supabase_auth") as mock_auth, \
-             patch("app.auth.dependencies.UserRepository") as mock_repo_class:
-
+        with (
+            patch("app.auth.dependencies.supabase_auth") as mock_auth,
+            patch("app.auth.dependencies.UserRepository") as mock_repo_class,
+        ):
             mock_auth.verify_token = AsyncMock(return_value=claims)
             mock_repo = AsyncMock()
             # First call returns None (user doesn't exist yet)
@@ -118,9 +123,10 @@ class TestGetCurrentUserContext:
         claims = _make_claims()
         suspended_user = _make_user("suspended")
 
-        with patch("app.auth.dependencies.supabase_auth") as mock_auth, \
-             patch("app.auth.dependencies.UserRepository") as mock_repo_class:
-
+        with (
+            patch("app.auth.dependencies.supabase_auth") as mock_auth,
+            patch("app.auth.dependencies.UserRepository") as mock_repo_class,
+        ):
             mock_auth.verify_token = AsyncMock(return_value=claims)
             mock_repo = AsyncMock()
             mock_repo.get_by_supabase_id = AsyncMock(return_value=suspended_user)

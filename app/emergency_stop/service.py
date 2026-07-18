@@ -32,13 +32,20 @@ class EmergencyStopService:
             if emergency_stop and emergency_stop.active:
                 await valkey_client.set(
                     f"emergency_stop:{owner_id}",
-                    {"active": True, "activated_at": emergency_stop.activated_at.isoformat() if emergency_stop.activated_at else None},
+                    {
+                        "active": True,
+                        "activated_at": emergency_stop.activated_at.isoformat()
+                        if emergency_stop.activated_at
+                        else None,
+                    },
                     ttl=60,
                 )
                 return True
         return False
 
-    async def activate(self, owner_id: UUID, reason: str, actor_id: UUID) -> Optional[EmergencyStop]:
+    async def activate(
+        self, owner_id: UUID, reason: str, actor_id: UUID
+    ) -> Optional[EmergencyStop]:
         async with get_db_session() as session:
             existing = await session.execute(
                 select(EmergencyStop).where(EmergencyStop.owner_id == owner_id)
@@ -81,7 +88,12 @@ class EmergencyStopService:
 
             await valkey_client.set(
                 f"emergency_stop:{owner_id}",
-                {"active": True, "activated_at": emergency_stop.activated_at.isoformat() if emergency_stop.activated_at else None},
+                {
+                    "active": True,
+                    "activated_at": emergency_stop.activated_at.isoformat()
+                    if emergency_stop.activated_at
+                    else None,
+                },
                 ttl=3600,
             )
 

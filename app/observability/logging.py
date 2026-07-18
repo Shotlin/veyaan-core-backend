@@ -15,10 +15,20 @@ def setup_logging():
     # Redact sensitive fields
     class RedactingProcessor:
         SENSITIVE_FIELDS = {
-            "authorization", "token", "password", "secret", "credential",
-            "access_token", "refresh_token", "api_key", "private_key",
-            "supabase_service_role_key", "database_url", "valkey_url",
-            "nats_url", "r2_secret_access_key"
+            "authorization",
+            "token",
+            "password",
+            "secret",
+            "credential",
+            "access_token",
+            "refresh_token",
+            "api_key",
+            "private_key",
+            "supabase_service_role_key",
+            "database_url",
+            "valkey_url",
+            "nats_url",
+            "r2_secret_access_key",
         }
 
         def __call__(self, logger, name, event_dict):
@@ -39,7 +49,7 @@ def setup_logging():
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
             RedactingProcessor(),
-            structlog.processors.JSONRenderer()
+            structlog.processors.JSONRenderer(),
         ],
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),

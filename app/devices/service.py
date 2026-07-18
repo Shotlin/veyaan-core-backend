@@ -53,7 +53,9 @@ class DeviceService:
                 expires_at=pairing.expires_at,
             )
 
-    async def confirm_pairing(self, pairing_id: UUID, owner_id: UUID, pairing_code: str) -> DeviceConfirmPairingResponse:
+    async def confirm_pairing(
+        self, pairing_id: UUID, owner_id: UUID, pairing_code: str
+    ) -> DeviceConfirmPairingResponse:
         async with get_db_session() as session:
             result = await session.execute(
                 select(PairingRequest).where(PairingRequest.id == pairing_id).with_for_update()
@@ -61,15 +63,21 @@ class DeviceService:
             pairing = result.scalar_one_or_none()
 
             if not pairing:
-                raise ApiError(ErrorCode.PAIRING_INVALID, "Pairing request not found", status_code=404)
+                raise ApiError(
+                    ErrorCode.PAIRING_INVALID, "Pairing request not found", status_code=404
+                )
 
             if pairing.status != PairingStatus.PENDING:
-                raise ApiError(ErrorCode.PAIRING_INVALID, f"Pairing is {pairing.status.value}", status_code=400)
+                raise ApiError(
+                    ErrorCode.PAIRING_INVALID, f"Pairing is {pairing.status.value}", status_code=400
+                )
 
             if pairing.expires_at < datetime.now(timezone.utc):
                 pairing.status = PairingStatus.EXPIRED
                 await session.flush()
-                raise ApiError(ErrorCode.PAIRING_EXPIRED, "Pairing code has expired", status_code=400)
+                raise ApiError(
+                    ErrorCode.PAIRING_EXPIRED, "Pairing code has expired", status_code=400
+                )
 
             pairing.attempt_count = (pairing.attempt_count or 0) + 1
             if pairing.attempt_count > 5:
@@ -143,7 +151,9 @@ class DeviceService:
                     operating_system=d.operating_system,
                     app_version=d.app_version,
                     protocol_version=d.protocol_version,
-                    trust_status=d.trust_status.value if hasattr(d.trust_status, 'value') else d.trust_status,
+                    trust_status=d.trust_status.value
+                    if hasattr(d.trust_status, "value")
+                    else d.trust_status,
                     last_seen_at=d.last_seen_at,
                     created_at=d.created_at,
                 )
@@ -175,17 +185,23 @@ class DeviceService:
 
                     from app.events import subjects
                     from app.events.nats_client import nats_client
+
                     await nats_client.publish(
                         subjects.device_lifecycle(str(device_id)),
-                        json.dumps({
-                            "device_id": str(device_id),
-                            "state": "revoked",
-                            "owner_id": str(owner_id),
-                        }).encode(),
+                        json.dumps(
+                            {
+                                "device_id": str(device_id),
+                                "state": "revoked",
+                                "owner_id": str(owner_id),
+                            }
+                        ).encode(),
                     )
                 except Exception as e:
                     # Log but do not fail the revocation — DB state is authoritative
                     from app.observability.logging import logger
-                    logger.warning("revoke_nats_notify_failed", device_id=str(device_id), error=str(e))
+
+                    logger.warning(
+                        "revoke_nats_notify_failed", device_id=str(device_id), error=str(e)
+                    )
 
             return result

@@ -8,7 +8,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 # Add the app directory to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import app.database.models  # noqa: F401 - ensure all models are loaded for autogeneration
 from app.config import settings
@@ -73,6 +73,7 @@ async def run_async_migrations() -> None:
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
     import asyncio
+
     asyncio.run(run_async_migrations())
 
 

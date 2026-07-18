@@ -43,11 +43,13 @@ async def list_audit_logs(
         page=page,
         page_size=page_size,
     )
-    return ApiResponse(data={
-        "items": [AuditLogResponse.model_validate(item) for item in items],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "has_next": has_next,
-        "has_prev": has_prev,
-    })
+    return ApiResponse(
+        data={
+            "items": [AuditLogResponse.model_validate(item) for item in items],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "has_next": has_next,
+            "has_prev": has_prev,
+        }
+    )

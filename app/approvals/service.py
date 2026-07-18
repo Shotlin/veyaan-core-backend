@@ -43,18 +43,15 @@ class ApprovalService:
             repo = ApprovalRepository(session)
 
             # Load command in the SAME session (no cross-session call)
-            result = await session.execute(
-                select(Command).where(Command.id == command_id)
-            )
+            result = await session.execute(select(Command).where(Command.id == command_id))
             command = result.scalar_one_or_none()
             if not command:
                 return None, None
 
             # Verify ownership via device join
             from app.devices.models import Device
-            dev_result = await session.execute(
-                select(Device).where(Device.id == command.device_id)
-            )
+
+            dev_result = await session.execute(select(Device).where(Device.id == command.device_id))
             device = dev_result.scalar_one_or_none()
             if not device or str(device.owner_id) != str(owner_id):
                 return None, None
@@ -71,7 +68,8 @@ class ApprovalService:
                 owner_id=owner_id,
                 risk_level=risk_level,
                 action_title=action_title or f"Approve {command.command_type}",
-                action_description=action_description or f"Approve command {command.command_type} for device {command.device_id}",
+                action_description=action_description
+                or f"Approve command {command.command_type} for device {command.device_id}",
                 expires_in_minutes=expires_in_minutes,
             )
 
@@ -146,8 +144,12 @@ class ApprovalService:
             if approval.status == ApprovalStatus.APPROVED:
                 # GAP-P0-5 + GAP-P0-6: Transition AND write outbox in same session
                 try:
-                    await transition_command(session, approval.command_id, CommandState.APPROVED, "approval")
-                    await transition_command(session, approval.command_id, CommandState.QUEUED, "approval")
+                    await transition_command(
+                        session, approval.command_id, CommandState.APPROVED, "approval"
+                    )
+                    await transition_command(
+                        session, approval.command_id, CommandState.QUEUED, "approval"
+                    )
                 except StateTransitionError as e:
                     raise ApiError(ErrorCode.INVALID_STATE, str(e), status_code=409) from e
 
@@ -158,6 +160,7 @@ class ApprovalService:
                 command = cmd_result.scalar_one_or_none()
                 if command:
                     from app.devices.models import Device
+
                     dev_result = await session.execute(
                         select(Device).where(Device.id == command.device_id)
                     )
@@ -174,14 +177,18 @@ class ApprovalService:
                                 "device_id": str(device.id),
                                 "command_type": command.command_type,
                                 "parameters": command.parameters,
-                                "expires_at": command.expires_at.isoformat() if command.expires_at else None,
+                                "expires_at": command.expires_at.isoformat()
+                                if command.expires_at
+                                else None,
                                 "risk_level": command.risk_level,
                             },
                         )
 
             elif approval.status == ApprovalStatus.REJECTED:
                 try:
-                    await transition_command(session, approval.command_id, CommandState.REJECTED, "approval")
+                    await transition_command(
+                        session, approval.command_id, CommandState.REJECTED, "approval"
+                    )
                 except StateTransitionError as e:
                     raise ApiError(ErrorCode.INVALID_STATE, str(e), status_code=409) from e
 

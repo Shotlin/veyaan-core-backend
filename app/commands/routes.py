@@ -21,7 +21,9 @@ async def get_command_service() -> CommandService:
     return CommandService()
 
 
-@router.post("", response_model=ApiResponse[CreateCommandResponse], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", response_model=ApiResponse[CreateCommandResponse], status_code=status.HTTP_201_CREATED
+)
 async def create_command(
     request: CreateCommandRequest,
     current_user: UserContext = Depends(get_current_user_context),
@@ -72,14 +74,16 @@ async def list_commands(
     )
     has_next = (page * page_size) < total
     has_prev = page > 1
-    return ApiResponse(data=PaginatedResponse(
-        items=[CommandResponse.model_validate(cmd) for cmd in commands],
-        total=total,
-        page=page,
-        page_size=page_size,
-        has_next=has_next,
-        has_prev=has_prev,
-    ))
+    return ApiResponse(
+        data=PaginatedResponse(
+            items=[CommandResponse.model_validate(cmd) for cmd in commands],
+            total=total,
+            page=page,
+            page_size=page_size,
+            has_next=has_next,
+            has_prev=has_prev,
+        )
+    )
 
 
 @router.post("/{command_id}/cancel", response_model=ApiResponse[dict])
@@ -92,7 +96,9 @@ async def cancel_command(
 
     success = await service.cancel_command(command_id, current_user.id)
     if not success:
-        raise ApiError(ErrorCode.COMMAND_NOT_FOUND, "Command not found or cannot be cancelled", status_code=404)
+        raise ApiError(
+            ErrorCode.COMMAND_NOT_FOUND, "Command not found or cannot be cancelled", status_code=404
+        )
     return ApiResponse(data={"cancelled": True})
 
 

@@ -21,8 +21,10 @@ from app.api.errors import ApiError, ErrorCode
 # Base domain error
 # ---------------------------------------------------------------------------
 
+
 class DomainError(ApiError):
     """Base class for all structured domain errors."""
+
     default_code: ErrorCode = ErrorCode.INTERNAL_ERROR
     default_status: int = 400
 
@@ -45,8 +47,10 @@ class DomainError(ApiError):
 # 4xx Client Errors
 # ---------------------------------------------------------------------------
 
+
 class NotFoundError(DomainError):
     """Resource does not exist or is not accessible to the caller."""
+
     default_code = ErrorCode.NOT_FOUND
     default_status = 404
 
@@ -54,11 +58,15 @@ class NotFoundError(DomainError):
         msg = f"{resource} not found"
         if resource_id:
             msg = f"{resource} '{resource_id}' not found"
-        super().__init__(message=msg, details={"resource": resource, "id": str(resource_id) if resource_id else None})
+        super().__init__(
+            message=msg,
+            details={"resource": resource, "id": str(resource_id) if resource_id else None},
+        )
 
 
 class ForbiddenError(DomainError):
     """Caller is authenticated but does not have permission."""
+
     default_code = ErrorCode.FORBIDDEN
     default_status = 403
 
@@ -68,6 +76,7 @@ class ForbiddenError(DomainError):
 
 class UnauthorizedError(DomainError):
     """Caller is not authenticated."""
+
     default_code = ErrorCode.INVALID_TOKEN
     default_status = 401
 
@@ -77,6 +86,7 @@ class UnauthorizedError(DomainError):
 
 class ConflictError(DomainError):
     """Request conflicts with existing state (e.g. idempotency key reuse)."""
+
     default_code = ErrorCode.IDEMPOTENCY_CONFLICT
     default_status = 409
 
@@ -86,6 +96,7 @@ class ConflictError(DomainError):
 
 class ValidationError(DomainError):
     """Request payload is structurally invalid."""
+
     default_code = ErrorCode.VALIDATION_ERROR
     default_status = 422
 
@@ -96,6 +107,7 @@ class ValidationError(DomainError):
 
 class RateLimitError(DomainError):
     """Too many requests from this client."""
+
     default_code = ErrorCode.RATE_LIMITED
     default_status = 429
 
@@ -106,6 +118,7 @@ class RateLimitError(DomainError):
 
 class LockedError(DomainError):
     """Resource is locked — e.g. emergency stop is active."""
+
     default_code = ErrorCode.EMERGENCY_STOP_ACTIVE
     default_status = 423
 
@@ -115,10 +128,13 @@ class LockedError(DomainError):
 
 class InvalidStateError(DomainError):
     """Operation is not allowed in the resource's current state."""
+
     default_code = ErrorCode.INVALID_STATE
     default_status = 409
 
-    def __init__(self, message: str, current_state: Optional[str] = None, target_state: Optional[str] = None):
+    def __init__(
+        self, message: str, current_state: Optional[str] = None, target_state: Optional[str] = None
+    ):
         details: dict = {}
         if current_state:
             details["current_state"] = current_state
@@ -131,6 +147,7 @@ class InvalidStateError(DomainError):
 # Domain-specific errors
 # ---------------------------------------------------------------------------
 
+
 class DeviceNotFoundError(NotFoundError):
     def __init__(self, device_id: Any = None):
         super().__init__("device", device_id)
@@ -139,7 +156,10 @@ class DeviceNotFoundError(NotFoundError):
 
 class DeviceRevokedError(ForbiddenError):
     def __init__(self, device_id: Any = None):
-        super().__init__(f"Device {device_id} is not trusted", details={"device_id": str(device_id) if device_id else None})
+        super().__init__(
+            f"Device {device_id} is not trusted",
+            details={"device_id": str(device_id) if device_id else None},
+        )
         self.code = ErrorCode.DEVICE_REVOKED
         self.status_code = 403
 
@@ -174,7 +194,9 @@ class ApprovalExpiredError(DomainError):
 
 class ApprovalAlreadyDecidedError(ConflictError):
     def __init__(self, current_status: str):
-        super().__init__(f"Approval was already {current_status}", details={"status": current_status})
+        super().__init__(
+            f"Approval was already {current_status}", details={"status": current_status}
+        )
         self.code = ErrorCode.APPROVAL_ALREADY_DECIDED
 
 

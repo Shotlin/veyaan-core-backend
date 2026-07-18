@@ -5,6 +5,7 @@ Revises: 005
 Create Date: 2024-01-18 00:00:00.000000
 
 """
+
 import uuid
 
 import sqlalchemy as sa
@@ -12,8 +13,8 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
 # revision identifiers, used by Alembic.
-revision = '006'
-down_revision = '005'
+revision = "006"
+down_revision = "005"
 branch_labels = None
 depends_on = None
 
@@ -21,21 +22,51 @@ depends_on = None
 def upgrade() -> None:
     # Create audit_logs table
     op.create_table(
-        'audit_logs',
-        sa.Column('id', UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
-        sa.Column('user_id', UUID(as_uuid=True), sa.ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True),
-        sa.Column('device_id', UUID(as_uuid=True), sa.ForeignKey('devices.id', ondelete='SET NULL'), nullable=True, index=True),
-        sa.Column('command_id', UUID(as_uuid=True), sa.ForeignKey('commands.id', ondelete='SET NULL'), nullable=True, index=True),
-        sa.Column('approval_id', UUID(as_uuid=True), sa.ForeignKey('approvals.id', ondelete='SET NULL'), nullable=True, index=True),
-        sa.Column('category', sa.String(50), nullable=False, index=True),
-        sa.Column('action', sa.String(100), nullable=False, index=True),
-        sa.Column('result', sa.String(50), nullable=False),
-        sa.Column('event_metadata', sa.Text(), nullable=True),
-        sa.Column('request_id', sa.String(64), nullable=True, index=True),
-        sa.Column('trace_id', sa.String(64), nullable=True, index=True),
-        sa.Column('ip_address', sa.String(45), nullable=True),
-        sa.Column('user_agent', sa.Text(), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False, index=True),
+        "audit_logs",
+        sa.Column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column(
+            "user_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
+            nullable=True,
+            index=True,
+        ),
+        sa.Column(
+            "device_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("devices.id", ondelete="SET NULL"),
+            nullable=True,
+            index=True,
+        ),
+        sa.Column(
+            "command_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("commands.id", ondelete="SET NULL"),
+            nullable=True,
+            index=True,
+        ),
+        sa.Column(
+            "approval_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("approvals.id", ondelete="SET NULL"),
+            nullable=True,
+            index=True,
+        ),
+        sa.Column("category", sa.String(50), nullable=False, index=True),
+        sa.Column("action", sa.String(100), nullable=False, index=True),
+        sa.Column("result", sa.String(50), nullable=False),
+        sa.Column("event_metadata", sa.Text(), nullable=True),
+        sa.Column("request_id", sa.String(64), nullable=True, index=True),
+        sa.Column("trace_id", sa.String(64), nullable=True, index=True),
+        sa.Column("ip_address", sa.String(45), nullable=True),
+        sa.Column("user_agent", sa.Text(), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+            index=True,
+        ),
     )
 
     # Add CHECK constraints for enum-like fields
@@ -63,4 +94,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_table('audit_logs')
+    op.drop_table("audit_logs")

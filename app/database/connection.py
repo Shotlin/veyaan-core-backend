@@ -35,6 +35,7 @@ async def init_db():
     """Initialize database connection. Schema managed by Alembic only."""
     async with engine.begin() as conn:
         from sqlalchemy import text
+
         await conn.execute(text("SELECT 1"))
 
 

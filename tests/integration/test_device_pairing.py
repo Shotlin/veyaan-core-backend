@@ -15,7 +15,6 @@ import pytest
 
 
 class TestDevicePairingFlow:
-
     @pytest.mark.asyncio
     async def test_start_pairing_returns_code_and_expiry(self):
         """start_pairing must return a pairing_request_id, code, and expiry."""
@@ -38,6 +37,7 @@ class TestDevicePairingFlow:
             async def refresh_side(obj):
                 obj.id = uuid4()
                 obj.expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+
             mock_session.refresh = AsyncMock(side_effect=refresh_side)
 
             mock_session.__aenter__ = AsyncMock(return_value=mock_session)
@@ -77,9 +77,10 @@ class TestDevicePairingFlow:
         mock_pairing.protocol_version = "v1"
         mock_pairing.device_public_identity = "ed25519-pub-key"
 
-        with patch("app.devices.service.get_db_session") as mock_db, \
-             patch("app.devices.service.AuditService") as mock_audit:
-
+        with (
+            patch("app.devices.service.get_db_session") as mock_db,
+            patch("app.devices.service.AuditService") as mock_audit,
+        ):
             mock_audit_instance = AsyncMock()
             mock_audit_instance.create_audit_log = AsyncMock()
             mock_audit.return_value = mock_audit_instance
@@ -93,13 +94,16 @@ class TestDevicePairingFlow:
             mock_session.commit = AsyncMock()
 
             added_objects = []
+
             def capture_add(obj):
                 added_objects.append(obj)
+
             mock_session.add = MagicMock(side_effect=capture_add)
 
             async def refresh_side(obj):
-                if hasattr(obj, 'id') and obj.id is None:
+                if hasattr(obj, "id") and obj.id is None:
                     obj.id = uuid4()
+
             mock_session.refresh = AsyncMock(side_effect=refresh_side)
 
             mock_session.__aenter__ = AsyncMock(return_value=mock_session)
@@ -193,10 +197,11 @@ class TestDevicePairingFlow:
 
         nats_published = []
 
-        with patch("app.devices.service.get_db_session") as mock_db, \
-             patch("app.devices.service.DeviceRepository") as mock_repo_class, \
-             patch("app.devices.service.AuditService") as mock_audit:
-
+        with (
+            patch("app.devices.service.get_db_session") as mock_db,
+            patch("app.devices.service.DeviceRepository") as mock_repo_class,
+            patch("app.devices.service.AuditService") as mock_audit,
+        ):
             mock_repo = AsyncMock()
             mock_repo.revoke_device = AsyncMock(return_value=True)
             mock_repo_class.return_value = mock_repo
@@ -212,12 +217,16 @@ class TestDevicePairingFlow:
             mock_db.return_value = mock_session
 
             with patch("app.events.nats_client.nats_client") as mock_nats:
+
                 async def capture_publish(subject, data):
                     nats_published.append({"subject": subject, "data": data})
+
                 mock_nats.publish = AsyncMock(side_effect=capture_publish)
 
                 with patch("app.events.subjects") as mock_subjects:
-                    mock_subjects.device_lifecycle = MagicMock(return_value=f"device.lifecycle.{device_id}")
+                    mock_subjects.device_lifecycle = MagicMock(
+                        return_value=f"device.lifecycle.{device_id}"
+                    )
 
                     service = DeviceService()
                     result = await service.revoke_device(device_id, owner_id)

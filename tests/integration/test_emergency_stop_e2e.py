@@ -12,7 +12,6 @@ import pytest
 
 
 class TestEmergencyStopE2E:
-
     @pytest.mark.asyncio
     async def test_activate_then_command_blocked_at_api(self):
         """
@@ -33,11 +32,12 @@ class TestEmergencyStopE2E:
         request.delayed_execution_allowed = False
         request.expires_at = None
 
-        with patch("app.commands.service.get_db_session") as mock_db, \
-             patch("app.commands.service.DeviceRepository") as mock_dev_repo_class, \
-             patch("app.commands.service.CommandRepository") as mock_repo_class, \
-             patch("app.commands.service.EmergencyStopService") as mock_estop:
-
+        with (
+            patch("app.commands.service.get_db_session") as mock_db,
+            patch("app.commands.service.DeviceRepository") as mock_dev_repo_class,
+            patch("app.commands.service.CommandRepository") as mock_repo_class,
+            patch("app.commands.service.EmergencyStopService") as mock_estop,
+        ):
             mock_device = MagicMock()
             mock_device.owner_id = owner_id
             mock_device.trust_status = MagicMock()
@@ -88,8 +88,11 @@ class TestEmergencyStopE2E:
         from app.websocket.gateway import DeviceConnection
 
         class FakeWebSocket:
-            async def send_json(self, data): pass
-            async def close(self, code=1000, reason=""): pass
+            async def send_json(self, data):
+                pass
+
+            async def close(self, code=1000, reason=""):
+                pass
 
         conn = DeviceConnection(device_id, owner_id, uuid4(), FakeWebSocket())
         manager.active_connections[device_id] = conn
@@ -131,7 +134,9 @@ class TestEmergencyStopE2E:
             async def send_json(self, data):
                 sent_messages.append(data)
                 return True
-            async def close(self, code=1000, reason=""): pass
+
+            async def close(self, code=1000, reason=""):
+                pass
 
         conn = DeviceConnection(device_id, owner_id, uuid4(), FakeWebSocket())
         manager.active_connections[device_id] = conn

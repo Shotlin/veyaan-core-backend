@@ -15,7 +15,6 @@ from app.approvals.models import ApprovalStatus
 
 
 class TestApprovalDecision:
-
     def _make_approval(
         self,
         status: ApprovalStatus = ApprovalStatus.PENDING,
@@ -49,12 +48,14 @@ class TestApprovalDecision:
 
         transition_calls = []
 
-        with patch("app.approvals.service.get_db_session") as mock_db, \
-             patch("app.approvals.service.ApprovalRepository") as mock_repo_class, \
-             patch("app.approvals.service.OutboxRepository"), \
-             patch("app.approvals.service.transition_command") as mock_transition:
-
+        with (
+            patch("app.approvals.service.get_db_session") as mock_db,
+            patch("app.approvals.service.ApprovalRepository") as mock_repo_class,
+            patch("app.approvals.service.OutboxRepository"),
+            patch("app.approvals.service.transition_command") as mock_transition,
+        ):
             call_count = [0]
+
             async def get_approval_side(aid):
                 call_count[0] += 1
                 return approval if call_count[0] == 1 else decided_approval
@@ -64,12 +65,14 @@ class TestApprovalDecision:
             mock_repo.decide_approval = AsyncMock(return_value=(True, None))
             mock_repo_class.return_value = mock_repo
 
-            mock_transition.side_effect = lambda s, cid, state, actor: transition_calls.append(state)
+            mock_transition.side_effect = lambda s, cid, state, actor: transition_calls.append(
+                state
+            )
 
             mock_session = AsyncMock()
-            mock_session.execute = AsyncMock(return_value=MagicMock(
-                scalar_one_or_none=MagicMock(return_value=None)
-            ))
+            mock_session.execute = AsyncMock(
+                return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+            )
             mock_session.flush = AsyncMock()
             mock_session.commit = AsyncMock()
             mock_session.__aenter__ = AsyncMock(return_value=mock_session)
@@ -102,12 +105,14 @@ class TestApprovalDecision:
         decided_approval.status = ApprovalStatus.REJECTED
         decided_approval.decided_at = datetime.now(timezone.utc)
 
-        with patch("app.approvals.service.get_db_session") as mock_db, \
-             patch("app.approvals.service.ApprovalRepository") as mock_repo_class, \
-             patch("app.approvals.service.OutboxRepository"), \
-             patch("app.approvals.service.transition_command") as mock_transition:
-
+        with (
+            patch("app.approvals.service.get_db_session") as mock_db,
+            patch("app.approvals.service.ApprovalRepository") as mock_repo_class,
+            patch("app.approvals.service.OutboxRepository"),
+            patch("app.approvals.service.transition_command") as mock_transition,
+        ):
             call_count = [0]
+
             async def get_approval_side(aid):
                 call_count[0] += 1
                 return approval if call_count[0] == 1 else decided_approval
@@ -119,9 +124,9 @@ class TestApprovalDecision:
             mock_transition.side_effect = AsyncMock()
 
             mock_session = AsyncMock()
-            mock_session.execute = AsyncMock(return_value=MagicMock(
-                scalar_one_or_none=MagicMock(return_value=None)
-            ))
+            mock_session.execute = AsyncMock(
+                return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+            )
             mock_session.flush = AsyncMock()
             mock_session.commit = AsyncMock()
             mock_session.__aenter__ = AsyncMock(return_value=mock_session)
@@ -148,9 +153,10 @@ class TestApprovalDecision:
         # Approval is already APPROVED
         approval = self._make_approval(status=ApprovalStatus.APPROVED, owner_id=owner_id)
 
-        with patch("app.approvals.service.get_db_session") as mock_db, \
-             patch("app.approvals.service.ApprovalRepository") as mock_repo_class:
-
+        with (
+            patch("app.approvals.service.get_db_session") as mock_db,
+            patch("app.approvals.service.ApprovalRepository") as mock_repo_class,
+        ):
             mock_repo = AsyncMock()
             mock_repo.get_approval = AsyncMock(return_value=approval)
             mock_repo_class.return_value = mock_repo
@@ -186,9 +192,10 @@ class TestApprovalDecision:
             owner_id=owner_id,
         )
 
-        with patch("app.approvals.service.get_db_session") as mock_db, \
-             patch("app.approvals.service.ApprovalRepository") as mock_repo_class:
-
+        with (
+            patch("app.approvals.service.get_db_session") as mock_db,
+            patch("app.approvals.service.ApprovalRepository") as mock_repo_class,
+        ):
             mock_repo = AsyncMock()
             mock_repo.get_approval = AsyncMock(return_value=approval)
             mock_repo_class.return_value = mock_repo
@@ -221,9 +228,10 @@ class TestApprovalDecision:
         attacker = uuid4()
         approval = self._make_approval(owner_id=real_owner)
 
-        with patch("app.approvals.service.get_db_session") as mock_db, \
-             patch("app.approvals.service.ApprovalRepository") as mock_repo_class:
-
+        with (
+            patch("app.approvals.service.get_db_session") as mock_db,
+            patch("app.approvals.service.ApprovalRepository") as mock_repo_class,
+        ):
             mock_repo = AsyncMock()
             mock_repo.get_approval = AsyncMock(return_value=approval)
             mock_repo_class.return_value = mock_repo
@@ -245,7 +253,6 @@ class TestApprovalDecision:
 
 
 class TestApprovalCreate:
-
     @pytest.mark.asyncio
     async def test_create_approval_uses_registry_risk_level(self):
         """Risk level from server registry, not client input, is used in approval creation."""
@@ -259,17 +266,19 @@ class TestApprovalCreate:
         mock_command.device_id = uuid4()
         mock_command.command_type = "device.factory_reset"
         from app.commands.models import CommandState
+
         mock_command.state = CommandState.AWAITING_APPROVAL.value
 
         mock_device = MagicMock()
         mock_device.owner_id = owner_id
 
-
-        with patch("app.approvals.service.get_db_session") as mock_db, \
-             patch("app.approvals.service.ApprovalRepository") as mock_repo_class, \
-             patch("app.approvals.service.command_registry") as mock_registry:
-
+        with (
+            patch("app.approvals.service.get_db_session") as mock_db,
+            patch("app.approvals.service.ApprovalRepository") as mock_repo_class,
+            patch("app.approvals.service.command_registry") as mock_registry,
+        ):
             from app.commands.models import RiskLevel
+
             mock_def = MagicMock()
             mock_def.risk_level = RiskLevel.HIGH
             mock_registry.get = MagicMock(return_value=mock_def)
@@ -282,10 +291,13 @@ class TestApprovalCreate:
             MagicMock()
 
             call_count = [0]
+
             async def execute_side(stmt, **kw):
                 call_count[0] += 1
                 r = MagicMock()
-                r.scalar_one_or_none.return_value = mock_command if call_count[0] == 1 else mock_device
+                r.scalar_one_or_none.return_value = (
+                    mock_command if call_count[0] == 1 else mock_device
+                )
                 return r
 
             mock_session.execute = AsyncMock(side_effect=execute_side)

@@ -98,7 +98,7 @@ class ListAuditLogsFilters(BaseModel):
     page_size: int = Field(default=20, ge=1, le=100)
 
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class PaginatedResponse(BaseModel, Generic[T]):
