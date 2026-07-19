@@ -55,8 +55,8 @@ class PairingRequest(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     status = Column(
-        SQLEnum(PairingStatus, create_constraint=False, native_enum=False),
-        default=PairingStatus.PENDING,
+        String(20),
+        default=PairingStatus.PENDING.value,
         nullable=False,
     )
     expires_at = Column(DateTime(timezone=True), nullable=False)
@@ -78,8 +78,8 @@ class Device(Base):
     protocol_version = Column(String(20), nullable=False, default="v1")
     device_public_identity = Column(Text, nullable=False)
     trust_status = Column(
-        SQLEnum(DeviceStatus, create_constraint=False, native_enum=False),
-        default=DeviceStatus.TRUSTED,
+        String(20),
+        default=DeviceStatus.TRUSTED.value,
         nullable=False,
     )
     last_seen_at = Column(DateTime(timezone=True), nullable=True)

@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import Column, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Column, DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
@@ -27,8 +27,13 @@ class NotificationRecord(Base):
         nullable=False,
         index=True,
     )
-    notification_type = Column(String(100), nullable=False, index=True)
+    notification_type = Column(String(100), nullable=False)
     channel = Column(String(50), nullable=False)  # e.g. "push", "internal", "email"
+
+    __table_args__ = (
+        Index("ix_notification_records_type", "notification_type"),
+    )
+
     status = Column(String(20), nullable=False, default="pending", index=True)
     payload = Column(JSONB, nullable=True)  # safe, non-sensitive notification data
     error_message = Column(Text, nullable=True)

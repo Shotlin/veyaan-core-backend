@@ -62,6 +62,24 @@ class ValkeyClient:
             return False
         return await self.client.exists(self._prefix(key)) > 0
 
+    async def getdel(self, key: str) -> Any:
+        """Atomically GET and DELETE a key.
+
+        Returns the value if the key existed, None otherwise.
+        Decodes JSON values the same way as get().
+        """
+        if not self.client:
+            return None
+        value = await self.client.getdel(self._prefix(key))
+        if value is None:
+            return None
+        try:
+            import json
+
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return value
+
     async def increment(self, key: str, ttl: Optional[int] = None) -> int:
         if not self.client:
             return 0

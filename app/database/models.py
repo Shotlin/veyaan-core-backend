@@ -6,4 +6,5 @@ from app.commands.models import Command, CommandStateEvent, Task  # noqa: F401
 from app.devices.models import Device, DeviceCredential, PairingRequest  # noqa: F401
 from app.emergency_stop.models import EmergencyStop  # noqa: F401
 from app.events.outbox_models import OutboxEvent  # noqa: F401
+from app.notifications.models import NotificationRecord  # noqa: F401
 from app.users.models import User  # noqa: F401

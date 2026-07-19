@@ -1,3 +1,19 @@
+"""Device service — pairing, listing, and revocation.
+
+Transaction boundaries
+----------------------
+Every write path opens **one** ``get_db_session()`` context and passes the
+session to dependent services (AuditService, OutboxRepository) so that the
+device, credential, audit row and outbox event all commit or roll back
+together.
+
+Failed pairing attempts
+-----------------------
+attempt_count and status changes are persisted in their own explicit commit
+*before* the ApiError is raised.  This ensures the security counter is
+durable even when the client receives a 400/429 response.
+"""
+
 import hashlib
 import hmac
 import secrets
@@ -9,6 +25,7 @@ from sqlalchemy import select
 from app.api.errors import ApiError, ErrorCode
 from app.audit.models import AuditAction, AuditCategory
 from app.audit.service import AuditService
+from app.config import settings
 from app.database.session import get_db_session_context as get_db_session
 from app.devices.models import Device, DeviceCredential, DeviceStatus, PairingRequest, PairingStatus
 from app.devices.repository import DeviceRepository
@@ -18,10 +35,12 @@ from app.devices.schemas import (
     DevicePairingResponse,
     DeviceResponse,
 )
+from app.events import subjects
+from app.events.outbox import OutboxRepository
 
 
 class DeviceService:
-    def __init__(self):
+    def __init__(self) -> None:
         pass
 
     async def start_pairing(self, request: DevicePairingRequest) -> DevicePairingResponse:
@@ -29,7 +48,9 @@ class DeviceService:
             pairing_code = secrets.token_urlsafe(16)
             pairing_code_hash = hashlib.sha256(pairing_code.encode()).hexdigest()
 
-            expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+            expires_at = datetime.now(timezone.utc) + timedelta(
+                minutes=settings.PAIRING_CODE_TTL_MINUTES
+            )
 
             pairing = PairingRequest(
                 device_name=request.display_name,
@@ -46,6 +67,7 @@ class DeviceService:
             session.add(pairing)
             await session.flush()
             await session.refresh(pairing)
+            await session.commit()
 
             return DevicePairingResponse(
                 pairing_request_id=pairing.id,
@@ -56,6 +78,13 @@ class DeviceService:
     async def confirm_pairing(
         self, pairing_id: UUID, owner_id: UUID, pairing_code: str
     ) -> DeviceConfirmPairingResponse:
+        """Confirm pairing atomically.
+
+        Security counter (attempt_count / status) is persisted in an explicit
+        commit before any ApiError is raised so failures are always durable.
+        """
+        error_to_raise: ApiError | None = None
+
         async with get_db_session() as session:
             result = await session.execute(
                 select(PairingRequest).where(PairingRequest.id == pairing_id).with_for_update()
@@ -69,26 +98,47 @@ class DeviceService:
 
             if pairing.status != PairingStatus.PENDING:
                 raise ApiError(
-                    ErrorCode.PAIRING_INVALID, f"Pairing is {pairing.status.value}", status_code=400
+                    ErrorCode.PAIRING_INVALID,
+                    f"Pairing is {pairing.status.value}",
+                    status_code=400,
                 )
 
+            # ── Expiry check ────────────────────────────────────────────────
             if pairing.expires_at < datetime.now(timezone.utc):
                 pairing.status = PairingStatus.EXPIRED
                 await session.flush()
+                await session.commit()
                 raise ApiError(
                     ErrorCode.PAIRING_EXPIRED, "Pairing code has expired", status_code=400
                 )
 
+            # ── Attempt counter ─────────────────────────────────────────────
+            max_attempts = settings.MAX_PAIRING_ATTEMPTS
             pairing.attempt_count = (pairing.attempt_count or 0) + 1
-            if pairing.attempt_count > 5:
+
+            if pairing.attempt_count > max_attempts:
                 pairing.status = PairingStatus.REJECTED
                 await session.flush()
-                raise ApiError(ErrorCode.PAIRING_INVALID, "Too many attempts", status_code=429)
+                await session.commit()
+                raise ApiError(
+                    ErrorCode.PAIRING_INVALID,
+                    "Too many failed pairing attempts",
+                    status_code=429,
+                )
 
+            # ── Code verification ────────────────────────────────────────────
             code_hash = hashlib.sha256(pairing_code.encode()).hexdigest()
             if not hmac.compare_digest(code_hash, pairing.pairing_code_hash):
-                raise ApiError(ErrorCode.PAIRING_INVALID, "Invalid pairing code", status_code=400)
+                # Persist the incremented attempt count before raising
+                await session.flush()
+                await session.commit()
+                error_to_raise = ApiError(
+                    ErrorCode.PAIRING_INVALID, "Invalid pairing code", status_code=400
+                )
+                # Re-open is not needed — raise immediately after persistence
+                raise error_to_raise
 
+            # ── Success path — device + credential + audit in ONE transaction ─
             device = Device(
                 owner_id=owner_id,
                 display_name=pairing.device_name,
@@ -105,11 +155,13 @@ class DeviceService:
 
             credential_secret = secrets.token_urlsafe(32)
             credential_hash = hashlib.sha256(credential_secret.encode()).hexdigest()
-            expires_at = datetime.now(timezone.utc) + timedelta(days=365)
+            credential_expires = datetime.now(timezone.utc) + timedelta(
+                days=settings.DEVICE_CREDENTIAL_TTL_DAYS
+            )
             credential = DeviceCredential(
                 device_id=device.id,
                 credential_hash=credential_hash,
-                expires_at=expires_at,
+                expires_at=credential_expires,
             )
             session.add(credential)
 
@@ -119,7 +171,8 @@ class DeviceService:
 
             await session.flush()
 
-            audit = AuditService()
+            # Audit row in the SAME session/transaction (P0-04 fix)
+            audit = AuditService(session)
             await audit.create_audit_log(
                 category=AuditCategory.DEVICE,
                 action=AuditAction.DEVICE_PAIR_CONFIRMED,
@@ -129,6 +182,7 @@ class DeviceService:
                 metadata={"device_name": device.display_name},
             )
 
+            # Single commit — device + credential + pairing + audit
             await session.commit()
             await session.refresh(device)
 
@@ -161,47 +215,45 @@ class DeviceService:
             ]
 
     async def revoke_device(self, device_id: UUID, owner_id: UUID) -> bool:
-        """
-        GAP-P1-1: Revoke device and signal the gateway to close the active
-        WebSocket connection via a NATS device lifecycle event.
+        """Revoke a device.
+
+        All writes (revocation + audit + outbox event) commit in ONE
+        transaction.  Gateway is notified via the outbox event (not by
+        a direct NATS publish after commit).
         """
         async with get_db_session() as session:
             repo = DeviceRepository(session)
             result = await repo.revoke_device(device_id, owner_id)
-            if result:
-                audit = AuditService()
-                await audit.create_audit_log(
-                    category=AuditCategory.DEVICE,
-                    action=AuditAction.DEVICE_REVOKED,
-                    result="success",
-                    user_id=owner_id,
-                    device_id=device_id,
-                )
-                await session.commit()
 
-                # Signal gateway to close this device's WebSocket connection
-                try:
-                    import json
+            if not result:
+                return False
 
-                    from app.events import subjects
-                    from app.events.nats_client import nats_client
+            # Audit row in the same transaction (P0-04 fix)
+            audit = AuditService(session)
+            await audit.create_audit_log(
+                category=AuditCategory.DEVICE,
+                action=AuditAction.DEVICE_REVOKED,
+                result="success",
+                user_id=owner_id,
+                device_id=device_id,
+            )
 
-                    await nats_client.publish(
-                        subjects.device_lifecycle(str(device_id)),
-                        json.dumps(
-                            {
-                                "device_id": str(device_id),
-                                "state": "revoked",
-                                "owner_id": str(owner_id),
-                            }
-                        ).encode(),
-                    )
-                except Exception as e:
-                    # Log but do not fail the revocation — DB state is authoritative
-                    from app.observability.logging import logger
+            # Write device.revoked outbox event — gateway subscribes and closes
+            # the WebSocket connection.  Outbox ensures delivery even if NATS
+            # is temporarily unavailable (P0-13 fix).
+            outbox = OutboxRepository(session)
+            await outbox.add_event(
+                event_type="device.revoked",
+                aggregate_type="device",
+                aggregate_id=str(device_id),
+                subject=subjects.device_lifecycle(str(device_id)),
+                payload={
+                    "device_id": str(device_id),
+                    "state": "revoked",
+                    "owner_id": str(owner_id),
+                },
+            )
 
-                    logger.warning(
-                        "revoke_nats_notify_failed", device_id=str(device_id), error=str(e)
-                    )
-
-            return result
+            # Single commit — revocation + audit + outbox event
+            await session.commit()
+            return True

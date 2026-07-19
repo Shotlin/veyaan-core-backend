@@ -165,10 +165,14 @@ async def startup():
     await valkey_client.connect()
     await nats_client.connect()
 
-    # Subscribe WebSocket gateway globally to NATS security event broadcasts
     if nats_client.nc:
+        # Security events (emergency stop / resume)
         await nats_client.nc.subscribe("veyaan.security.>", cb=security_callback)
-        logger.info("Subscribed WebSocket Gateway to veyaan.security.>")
+        logger.info("subscribed_gateway_security")
+
+        # Device lifecycle events (revocation → close WebSocket connection)
+        await nats_client.nc.subscribe("veyaan.device.lifecycle.>", cb=device_lifecycle_callback)
+        logger.info("subscribed_gateway_device_lifecycle")
 
     logger.info("Gateway startup complete")
 
@@ -235,9 +239,16 @@ async def websocket_endpoint(
         }
     )
 
-    # Step 2: Wait for auth_response (with timeout)
+    # Step 2: Wait for auth_response (with timeout) — accept text or binary frames
     try:
-        raw = await asyncio.wait_for(websocket.receive_bytes(), timeout=15.0)
+        ws_msg = await asyncio.wait_for(websocket.receive(), timeout=15.0)
+        if ws_msg.get("bytes") is not None:
+            raw = ws_msg["bytes"]
+        elif ws_msg.get("text") is not None:
+            raw = ws_msg["text"].encode("utf-8")
+        else:
+            await websocket.close(code=4001, reason="Empty auth frame")
+            return
     except asyncio.TimeoutError:
         await websocket.send_json(
             {"type": "error", "code": "AUTH_TIMEOUT", "message": "Authentication timed out"}
@@ -354,14 +365,29 @@ async def websocket_endpoint(
                             payload = json.loads(msg.data.decode())
                             cmd_id = payload["command_id"]
 
-                            # GAP-P0-4: Emergency-stop check before delivery
+                            # Emergency-stop check before delivery
                             is_stopped = await estop_service.is_active(owner_id)
                             if is_stopped:
                                 logger.warning(
-                                    "command_blocked_emergency_stop_gateway", command_id=cmd_id
+                                    "command_blocked_emergency_stop_gateway",
+                                    command_id=cmd_id,
                                 )
-                                # NAK to retry later when stop is released
                                 await msg.nak()
+                                continue
+
+                            # Pre-delivery DB state revalidation (P0-09 fix)
+                            # Verify command is still QUEUED and belongs to this device
+                            pre_check_ok = await _pre_delivery_check(
+                                UUID(cmd_id), device_id
+                            )
+                            if not pre_check_ok:
+                                logger.warning(
+                                    "command_pre_delivery_check_failed",
+                                    command_id=cmd_id,
+                                    device_id=str(device_id),
+                                )
+                                # ACK to discard — state is terminal or wrong device
+                                await msg.ack()
                                 continue
 
                             cmd_msg = CommandRequestMessage(
@@ -374,13 +400,16 @@ async def websocket_endpoint(
                             )
                             sent = await conn.send_json(cmd_msg.model_dump(mode="json"))
                             if sent:
+                                # Publish delivered event then ACK (P0-09 fix)
                                 await nats_client.publish_js(
                                     subjects.command_delivered(cmd_id),
                                     {"command_id": cmd_id, "device_id": str(device_id)},
                                     message_id=f"delivered-{cmd_id}",
                                 )
-                            # GAP-P0-3: ACK after send (result persistence handled by command_consumer worker)
-                            await msg.ack()
+                                await msg.ack()
+                            else:
+                                # WebSocket send failed — NAK for retry
+                                await msg.nak(delay=2)
                         except Exception as e:
                             logger.exception("nats_msg_error", error=str(e))
                             await msg.nak()
@@ -396,7 +425,14 @@ async def websocket_endpoint(
 
         try:
             while True:
-                data = await websocket.receive_bytes()
+                # Accept text or binary frames (P1-04 fix)
+                ws_msg = await websocket.receive()
+                if ws_msg.get("bytes") is not None:
+                    data = ws_msg["bytes"]
+                elif ws_msg.get("text") is not None:
+                    data = ws_msg["text"].encode("utf-8")
+                else:
+                    break
                 ProtocolValidator.validate_message_size(data)
                 await handle_device_message(device_id, owner_id, data)
         except WebSocketDisconnect:
@@ -556,15 +592,51 @@ async def _command_belongs_to_device(command_id: UUID, device_id: UUID) -> bool:
         return False
 
 
+async def _pre_delivery_check(command_id: UUID, device_id: UUID) -> bool:
+    """Authoritative pre-delivery check before sending a command to a device.
+
+    Returns True only when ALL of the following hold:
+    - Command exists in the database
+    - Command belongs to this device
+    - Command state is exactly QUEUED
+    - Command is not expired
+    - No emergency stop is active for the device owner
+    """
+    try:
+        from datetime import datetime, timezone
+
+        from sqlalchemy import select
+
+        from app.commands.models import Command, CommandState
+
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(Command).where(Command.id == command_id)
+            )
+            command = result.scalar_one_or_none()
+            if not command:
+                return False
+            if str(command.device_id) != str(device_id):
+                return False
+            if command.state != CommandState.QUEUED.value:
+                return False
+            if command.expires_at and command.expires_at < datetime.now(timezone.utc):
+                return False
+        return True
+    except Exception as e:
+        logger.error("pre_delivery_check_failed", command_id=str(command_id), error=str(e))
+        return False
+
+
 async def security_callback(msg):
     try:
         subject = msg.subject
         data = json.loads(msg.data.decode())
-        logger.info("received_security_event", subject=subject, data=data)
+        logger.info("received_security_event", subject=subject)
 
         parts = subject.split(".")
-        # veyaan.security.emergency_stop.owner_id
-        # veyaan.security.emergency_resume.owner_id
+        # veyaan.security.emergency_stop.<owner_id>
+        # veyaan.security.emergency_resume.<owner_id>
         if len(parts) >= 4:
             action = parts[2]
             owner_id = UUID(parts[3])
@@ -573,6 +645,22 @@ async def security_callback(msg):
             await connection_manager.broadcast_emergency_stop(owner_id, active, reason)
     except Exception as e:
         logger.exception("security_event_processing_failed", error=str(e))
+
+
+async def device_lifecycle_callback(msg):
+    """Handle device lifecycle events — closes WebSocket on revocation (P0-13 fix)."""
+    try:
+        data = json.loads(msg.data.decode())
+        state = data.get("state", "")
+        device_id_str = data.get("device_id", "")
+        if state == "revoked" and device_id_str:
+            device_id = UUID(device_id_str)
+            await connection_manager.close_device_connection(
+                device_id, reason="Device revoked"
+            )
+            logger.info("device_connection_closed_revoked", device_id=device_id_str)
+    except Exception as e:
+        logger.exception("device_lifecycle_event_failed", error=str(e))
 
 
 def _validate_protocol_version(version: str | None) -> bool:

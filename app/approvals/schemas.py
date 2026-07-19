@@ -34,9 +34,22 @@ class ApprovalCreateRequest(BaseModel):
 
 
 class ApprovalDecisionRequest(BaseModel):
+    """Legacy schema kept for backward compatibility. Use ApprovalDecisionBody instead."""
+
     decision: ApprovalDecision
     nonce: str = Field(..., min_length=1, description="Decision nonce from approval creation")
     note: Optional[str] = None
+
+
+class ApprovalDecisionBody(BaseModel):
+    """Request body for /approve and /reject endpoints.
+
+    The decision (approve vs reject) is encoded in the URL path, not the body.
+    Only the nonce (for security verification) and an optional note are required.
+    """
+
+    nonce: str = Field(..., min_length=32, max_length=512, description="Decision nonce")
+    note: Optional[str] = Field(default=None, max_length=2000)
 
 
 class ApprovalDecisionResponse(BaseModel):

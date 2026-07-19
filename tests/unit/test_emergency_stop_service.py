@@ -78,13 +78,14 @@ class TestEmergencyStopService:
             patch("app.emergency_stop.service.valkey_client") as mock_valkey,
             patch("app.emergency_stop.service.get_db_session") as mock_db,
             patch("app.emergency_stop.service.AuditService") as mock_audit_class,
-            patch("app.emergency_stop.service.nats_client") as mock_nats,
+            patch("app.emergency_stop.service.OutboxRepository") as mock_outbox_class,
         ):
             mock_audit = AsyncMock()
             mock_audit_class.return_value = mock_audit
 
             mock_valkey.set = AsyncMock()
-            mock_nats.publish_js = AsyncMock()
+            mock_outbox = AsyncMock()
+            mock_outbox_class.return_value = mock_outbox
 
             mock_session = AsyncMock()
             result_mock = MagicMock()
@@ -102,7 +103,7 @@ class TestEmergencyStopService:
             await service.activate(owner_id, "test reason", actor_id)
 
         mock_valkey.set.assert_called_once()  # cached after activation
-        mock_nats.publish_js.assert_called_once()  # broadcast to devices
+        mock_outbox.add_event.assert_called_once()  # queued in outbox
 
     @pytest.mark.asyncio
     async def test_release_clears_cache_and_broadcasts(self):
@@ -118,13 +119,14 @@ class TestEmergencyStopService:
             patch("app.emergency_stop.service.valkey_client") as mock_valkey,
             patch("app.emergency_stop.service.get_db_session") as mock_db,
             patch("app.emergency_stop.service.AuditService") as mock_audit_class,
-            patch("app.emergency_stop.service.nats_client") as mock_nats,
+            patch("app.emergency_stop.service.OutboxRepository") as mock_outbox_class,
         ):
             mock_audit = AsyncMock()
             mock_audit_class.return_value = mock_audit
 
             mock_valkey.delete = AsyncMock()
-            mock_nats.publish_js = AsyncMock()
+            mock_outbox = AsyncMock()
+            mock_outbox_class.return_value = mock_outbox
 
             mock_session = AsyncMock()
             result_mock = MagicMock()
@@ -141,4 +143,4 @@ class TestEmergencyStopService:
             await service.release(owner_id, released_by)
 
         mock_valkey.delete.assert_called_once()  # cache cleared
-        mock_nats.publish_js.assert_called_once()  # resume broadcast
+        mock_outbox.add_event.assert_called_once()  # queued in outbox

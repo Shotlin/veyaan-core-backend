@@ -15,7 +15,7 @@ class NatsClient:
 
     async def connect(self):
         self.nc = await nats.connect(
-            settings.NATS_URL, reconnect_timewait=2, max_reconnect_attempts=-1
+            settings.NATS_URL, reconnect_time_wait=2, max_reconnect_attempts=-1
         )
         self.js = self.nc.jetstream()
         await self._ensure_streams()
@@ -36,9 +36,9 @@ class NatsClient:
                 max_age=86400 * 7,
                 max_msgs=1000000,
                 storage="file",
-                replicas=1,
+                num_replicas=1,
                 discard="old",
-                duplicate_window=120 * 1_000_000_000,  # 2 minutes in nanos
+                duplicate_window=120,  # 2 minutes in seconds (nats-py serializes to nanos)
             ),
             StreamConfig(
                 name=settings.NATS_STREAM_DEVICE_EVENTS,
@@ -95,21 +95,29 @@ class NatsClient:
         await self.js.publish(subject, json.dumps(payload).encode(), headers=nats_headers)
 
     async def subscribe_durable(self, subject: str, durable_name: str, stream: str) -> Any:
+        """Create or bind a durable pull consumer filtered to `subject`.
+
+        The filter_subject is set on the ConsumerConfig so the NATS server
+        only delivers messages matching this subject to this consumer.
+        If the durable already exists with a compatible filter, we bind to it.
+        """
         if not self.js:
             raise RuntimeError("JetStream not connected")
         consumer = ConsumerConfig(
             durable_name=durable_name,
+            filter_subject=subject,
             ack_policy="explicit",
-            max_deliver=3,
+            max_deliver=5,
             ack_wait=30,
         )
         try:
             await self.js.add_consumer(stream, consumer)
         except Exception as e:
-            if "consumer already exists" not in str(e):
+            if "consumer already exists" not in str(e).lower():
                 raise
         sub = await self.js.pull_subscribe(subject, durable=durable_name, stream=stream)
         return sub
+
 
     async def publish(self, subject: str, payload: bytes, headers: Optional[dict] = None) -> None:
         if not self.nc:

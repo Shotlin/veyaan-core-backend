@@ -131,15 +131,12 @@ class ApprovalService:
                 await session.commit()
                 raise ApiError(ErrorCode.APPROVAL_EXPIRED, "Approval has expired", status_code=400)
 
-            # Verify nonce
-            from unittest.mock import Mock
-
-            if not isinstance(approval.decision_nonce_hash, Mock):
-                nonce_hash = hashlib.sha256(nonce.encode()).hexdigest()
-                if not hmac.compare_digest(nonce_hash, approval.decision_nonce_hash):
-                    raise ApiError(
-                        ErrorCode.INVALID_NONCE, "Invalid decision nonce", status_code=400
-                    )
+            # Verify nonce using hmac.compare_digest (no mock bypass in production)
+            nonce_hash = hashlib.sha256(nonce.encode()).hexdigest()
+            if not hmac.compare_digest(nonce_hash, approval.decision_nonce_hash):
+                raise ApiError(
+                    ErrorCode.INVALID_DECISION_NONCE, "Invalid decision nonce", status_code=400
+                )
 
             # Update approval
             approval.status = (

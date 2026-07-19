@@ -73,6 +73,15 @@ class SchedulerWorker:
         return await repo.expire_pending_approvals()
 
     async def _expire_commands(self, session) -> int:
+        """Expire non-terminal commands that have passed their expires_at.
+
+        Uses SELECT ... FOR UPDATE SKIP LOCKED so multiple scheduler instances
+        can run safely without conflicts.  Each command transitions through the
+        canonical state machine so CommandStateEvent records are created and
+        task state is updated in the same transaction (P1-07 fix).
+        """
+        from app.commands.state_machine import StateTransitionError, transition_command
+
         non_terminal = [
             CommandState.QUEUED.value,
             CommandState.AWAITING_APPROVAL.value,
@@ -80,23 +89,64 @@ class SchedulerWorker:
             CommandState.DELIVERED.value,
         ]
 
+        from datetime import datetime, timezone
+
+        from sqlalchemy import select
+        from sqlalchemy.orm import load_only
+
         result = await session.execute(
-            select(Command.id).where(
+            select(Command)
+            .where(
                 Command.state.in_(non_terminal),
                 Command.expires_at.is_not(None),
                 Command.expires_at < datetime.now(timezone.utc),
             )
+            .with_for_update(skip_locked=True)
+            .limit(100)  # bounded batch
         )
-        expired_ids = [row[0] for row in result.fetchall()]
+        commands = result.scalars().all()
 
-        if expired_ids:
-            await session.execute(
-                update(Command)
-                .where(Command.id.in_(expired_ids))
-                .values(state=CommandState.EXPIRED.value, finished_at=datetime.now(timezone.utc))
-            )
-            return len(expired_ids)
-        return 0
+        expired_count = 0
+        for command in commands:
+            try:
+                await transition_command(
+                    session,
+                    command.id,
+                    CommandState.EXPIRED,
+                    "scheduler",
+                )
+                # Update associated task state
+                from sqlalchemy import select as sa_select
+
+                from app.commands.models import Task, TaskState
+
+                task_result = await session.execute(
+                    sa_select(Task).where(Task.command_id == command.id).with_for_update(skip_locked=True)
+                )
+                task = task_result.scalar_one_or_none()
+                if task and task.state not in (
+                    TaskState.SUCCEEDED.value,
+                    TaskState.FAILED.value,
+                    TaskState.CANCELLED.value,
+                ):
+                    task.state = TaskState.FAILED.value
+                    task.result_summary = "expired"
+                    await session.flush()
+                expired_count += 1
+            except StateTransitionError as exc:
+                logger.warning(
+                    "scheduler_expire_transition_error",
+                    command_id=str(command.id),
+                    error=str(exc),
+                )
+            except Exception as exc:
+                logger.exception(
+                    "scheduler_expire_command_error",
+                    command_id=str(command.id),
+                    error=str(exc),
+                )
+
+        return expired_count
 
     async def _detect_stale_device_presence(self) -> int:
         """

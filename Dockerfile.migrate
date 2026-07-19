@@ -7,10 +7,9 @@ RUN apk add --no-cache \
     musl-dev \
     libffi-dev \
     openssl-dev \
-    postgresql-dev \
-    curl
+    postgresql-dev
 
-# Create veyaan group and user with explicit UID/GID
+# Non-root user
 RUN addgroup -g 10001 -S veyaan && \
     adduser -u 10001 -S -G veyaan veyaan && \
     chown -R veyaan:veyaan /app
@@ -18,10 +17,12 @@ RUN addgroup -g 10001 -S veyaan && \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Alembic needs the full app tree for model imports
+COPY alembic.ini .
+COPY migrations/ ./migrations/
 COPY app/ ./app/
 RUN chown -R veyaan:veyaan /app
 
 USER veyaan
 
-# WORKER_TYPE must be set via environment variable (outbox | lifecycle | scheduler)
-CMD ["python", "-m", "app.workers.entrypoint"]
+CMD ["alembic", "upgrade", "head"]

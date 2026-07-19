@@ -56,17 +56,19 @@ class Settings(BaseSettings):
     R2_ACCOUNT_ID: str = ""
     R2_ACCESS_KEY_ID: str = ""
     R2_SECRET_ACCESS_KEY: str = ""
-    R2_BUCKET: str = "veyaan-dev"
-    R2_BUCKET_NAME: str = "veyaan-dev"  # alias used by r2_client.py
+    R2_BUCKET_NAME: str = "veyaan-dev"  # canonical name used throughout the app
     R2_ENDPOINT_URL: str = ""  # e.g. https://<account_id>.r2.cloudflarestorage.com
     R2_PUBLIC_URL: str = ""
 
     # Security
     DEVICE_CREDENTIAL_TTL_DAYS: int = 365
     PAIRING_CODE_TTL_MINUTES: int = 10
+    MAX_PAIRING_ATTEMPTS: int = 5
     APPROVAL_TTL_MINUTES: int = 30
     IDEMPOTENCY_TTL_HOURS: int = 24
     EMERGENCY_STOP_CACHE_TTL: int = 60
+    COMMAND_DEFAULT_TTL_MINUTES: int = 1440   # 24 hours
+    COMMAND_MAX_TTL_MINUTES: int = 10080      # 7 days
 
     # Trusted reverse proxies — only these IPs may set X-Forwarded-For
     # In production this is the Caddy container's network IP (e.g. 172.x.x.x)

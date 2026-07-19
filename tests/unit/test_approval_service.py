@@ -21,7 +21,9 @@ class TestApprovalDecision:
         expires_at: datetime | None = None,
         owner_id=None,
         command_id=None,
+        nonce: str = "valid-nonce",
     ):
+        import hashlib
         approval = MagicMock()
         approval.id = uuid4()
         approval.owner_id = owner_id or uuid4()
@@ -29,12 +31,14 @@ class TestApprovalDecision:
         approval.status = status
         approval.expires_at = expires_at
         approval.decided_at = None
+        approval.decision_nonce_hash = hashlib.sha256(nonce.encode()).hexdigest()
         return approval
 
     @pytest.mark.asyncio
     async def test_approve_pending_transitions_command_to_queued(self):
         """APPROVE on PENDING approval must transition command → APPROVED → QUEUED."""
         from app.approvals.service import ApprovalService
+        import hashlib
 
         owner_id = uuid4()
         approval = self._make_approval(owner_id=owner_id)
@@ -45,6 +49,7 @@ class TestApprovalDecision:
         decided_approval.command_id = approval.command_id
         decided_approval.status = ApprovalStatus.APPROVED
         decided_approval.decided_at = datetime.now(timezone.utc)
+        decided_approval.decision_nonce_hash = approval.decision_nonce_hash
 
         transition_calls = []
 
@@ -108,6 +113,7 @@ class TestApprovalDecision:
         decided_approval.command_id = approval.command_id
         decided_approval.status = ApprovalStatus.REJECTED
         decided_approval.decided_at = datetime.now(timezone.utc)
+        decided_approval.decision_nonce_hash = approval.decision_nonce_hash
 
         with (
             patch("app.approvals.service.get_db_session") as mock_db,

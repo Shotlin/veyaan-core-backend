@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from app.api.dependencies import get_current_user_context
 from app.api.responses import ApiResponse
 from app.approvals.schemas import (
+    ApprovalDecisionBody,
     ApprovalDecisionRequest,
     ApprovalDecisionResponse,
     ApprovalResponse,
@@ -70,7 +71,7 @@ async def get_approval(
 @router.post("/{approval_id}/approve", response_model=ApiResponse[ApprovalDecisionResponse])
 async def approve(
     approval_id: UUID,
-    request: ApprovalDecisionRequest,
+    request: ApprovalDecisionBody,
     current_user: UserContext = Depends(get_current_user_context),
     service: ApprovalService = Depends(get_approval_service),
 ):
@@ -93,7 +94,7 @@ async def approve(
 @router.post("/{approval_id}/reject", response_model=ApiResponse[ApprovalDecisionResponse])
 async def reject(
     approval_id: UUID,
-    request: ApprovalDecisionRequest,
+    request: ApprovalDecisionBody,
     current_user: UserContext = Depends(get_current_user_context),
     service: ApprovalService = Depends(get_approval_service),
 ):

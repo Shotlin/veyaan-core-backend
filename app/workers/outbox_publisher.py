@@ -70,8 +70,13 @@ class OutboxPublisher:
                                             CommandState.BLOCKED_BY_EMERGENCY_STOP,
                                             "outbox_enforcement",
                                         )
-                                    except Exception:
-                                        pass
+                                    except Exception as e:
+                                        logger.warning(
+                                            "outbox_emergency_stop_block_failed",
+                                            command_id=str(command.id),
+                                            event_id=str(event.id),
+                                            error=str(e),
+                                        )
                                     await repo.mark_failed(
                                         event.id, "Blocked by active emergency stop"
                                     )
@@ -95,7 +100,8 @@ class OutboxPublisher:
                     else:
                         await repo.increment_attempt(event.id, str(e))
 
-            if published > 0 or any(event.aggregate_type == "command" for event in events):
+            if published > 0 or len(events) > 0:
+                # Always commit after processing a batch — marks state changes durable
                 await session.commit()
 
             return published

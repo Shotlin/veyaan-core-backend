@@ -64,6 +64,9 @@ def upgrade() -> None:
     op.add_column("commands", sa.Column("result_data", JSONB, nullable=True))
 
     # Convert commands.parameters from Text to JSONB
+    # Drop default constraint first to avoid automatic cast error
+    op.execute("ALTER TABLE commands ALTER COLUMN parameters DROP DEFAULT")
+
     # For existing data, try to parse as JSON, fall back to empty object
     op.execute("""
         ALTER TABLE commands
@@ -75,6 +78,9 @@ def upgrade() -> None:
         END
     """)
     op.alter_column("commands", "parameters", nullable=False, server_default="{}")
+
+    # Rename command_state_events.metadata to event_metadata
+    op.alter_column("command_state_events", "metadata", new_column_name="event_metadata")
 
     # Convert command_state_events.event_metadata from Text to JSONB
     op.execute("""
@@ -99,12 +105,14 @@ def upgrade() -> None:
     """)
 
 
+
 def downgrade() -> None:
     # Revert audit_logs.event_metadata
     op.alter_column("audit_logs", "event_metadata", type_=sa.Text, nullable=True)
 
     # Revert command_state_events.event_metadata
     op.alter_column("command_state_events", "event_metadata", type_=sa.Text, nullable=True)
+    op.alter_column("command_state_events", "event_metadata", new_column_name="metadata")
 
     # Revert commands.parameters
     op.alter_column("commands", "parameters", type_=sa.Text, nullable=False, server_default="{}")

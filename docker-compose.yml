@@ -1,143 +1,30 @@
-version: '3.8'
+# Docker Compose v2 — local development stack
+# Usage: cp .env.docker.example .env && make local-up
 
 services:
-  caddy:
-    image: caddy:2-alpine
+  # ── Infrastructure ────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16.4-alpine
+    environment:
+      POSTGRES_DB: veyaan_dev
+      POSTGRES_USER: veyaan
+      POSTGRES_PASSWORD: dev_password
     ports:
-      - "80:80"
-      - "443:443"
+      - "5432:5432"
     volumes:
-      - ./infrastructure/caddy/Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - veyaan-network
     healthcheck:
-      test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    environment:
-      - ENVIRONMENT=development
-    env_file:
-      - .env
-    volumes:
-      - ./app:/app/app
-    depends_on:
-      neon:
-        condition: service_healthy
-      nats:
-        condition: service_healthy
-      valkey:
-        condition: service_healthy
-    networks:
-      - veyaan-network
-    ports:
-      - "8000:8000"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  gateway:
-    build:
-      context: .
-      dockerfile: Dockerfile.gateway
-    command: python -m app.websocket.gateway
-    environment:
-      - ENVIRONMENT=development
-    env_file:
-      - .env
-    volumes:
-      - ./app:/app/app
-    depends_on:
-      nats:
-        condition: service_healthy
-      valkey:
-        condition: service_healthy
-    networks:
-      - veyaan-network
-    ports:
-      - "8001:8001"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health/live"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  outbox-publisher:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
-    command: python -m app.workers.outbox_publisher
-    environment:
-      - ENVIRONMENT=development
-    env_file:
-      - .env
-    volumes:
-      - ./app:/app/app
-    depends_on:
-      neon:
-        condition: service_healthy
-      nats:
-        condition: service_healthy
-      valkey:
-        condition: service_healthy
-    networks:
-      - veyaan-network
-
-  command-consumer:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
-    command: python -m app.workers.command_consumer
-    environment:
-      - ENVIRONMENT=development
-    env_file:
-      - .env
-    volumes:
-      - ./app:/app/app
-    depends_on:
-      neon:
-        condition: service_healthy
-      nats:
-        condition: service_healthy
-      valkey:
-        condition: service_healthy
-    networks:
-      - veyaan-network
-
-  scheduler:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
-    command: python -m app.workers.scheduler
-    environment:
-      - ENVIRONMENT=development
-    env_file:
-      - .env
-    volumes:
-      - ./app:/app/app
-    depends_on:
-      neon:
-        condition: service_healthy
-      nats:
-        condition: service_healthy
-      valkey:
-        condition: service_healthy
-    networks:
-      - veyaan-network
+      test: ["CMD-SHELL", "pg_isready -U veyaan -d veyaan_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   nats:
-    image: nats:2.10-alpine
-    command: ["-js", "-m", "8222", "-c", "/etc/nats/jetstream.conf"]
+    image: nats:2.10.18-alpine
+    command: ["-c", "/etc/nats/jetstream.conf"]
     ports:
       - "4222:4222"
       - "8222:8222"
@@ -147,13 +34,13 @@ services:
     networks:
       - veyaan-network
     healthcheck:
-      test: ["CMD", "nats", "server", "check", "jetstream"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8222/healthz | grep -q ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   valkey:
-    image: valkey/valkey:8-alpine
+    image: valkey/valkey:8.0.1-alpine
     ports:
       - "6379:6379"
     volumes:
@@ -162,30 +49,149 @@ services:
       - veyaan-network
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
-  neon:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: veyaan_dev
-      POSTGRES_USER: veyaan
-      POSTGRES_PASSWORD: dev_password
-    ports:
-      - "5432:5432"
-    volumes:
-      - neon_data:/var/lib/postgresql/data
+  # ── Migration (one-shot) ──────────────────────────────────────────────────
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrate
+    env_file:
+      - .env
+    command: ["alembic", "upgrade", "head"]
     networks:
       - veyaan-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── Application Services ──────────────────────────────────────────────────
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      - ENVIRONMENT=development
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+    networks:
+      - veyaan-network
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      nats:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U veyaan -d veyaan_dev"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8000/health/live | grep -q alive"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
 
-  monitoring:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    env_file:
+      - .env
+    environment:
+      - ENVIRONMENT=development
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./app:/app/app
+    networks:
+      - veyaan-network
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      nats:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8001/health/live | grep -q alive"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  outbox-publisher:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    env_file:
+      - .env
+    environment:
+      - ENVIRONMENT=development
+      - WORKER_TYPE=outbox
+    volumes:
+      - ./app:/app/app
+    networks:
+      - veyaan-network
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      nats:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+
+  lifecycle-consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    env_file:
+      - .env
+    environment:
+      - ENVIRONMENT=development
+      - WORKER_TYPE=lifecycle
+    volumes:
+      - ./app:/app/app
+    networks:
+      - veyaan-network
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      nats:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    env_file:
+      - .env
+    environment:
+      - ENVIRONMENT=development
+      - WORKER_TYPE=scheduler
+    volumes:
+      - ./app:/app/app
+    networks:
+      - veyaan-network
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      nats:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+
+  # ── Optional Observability (profile: monitoring) ──────────────────────────
+
+  prometheus:
     image: prom/prometheus:latest
+    profiles: ["monitoring"]
     ports:
       - "9090:9090"
     volumes:
@@ -194,14 +200,29 @@ services:
     networks:
       - veyaan-network
 
+  # ── Optional Reverse Proxy (profile: proxy) ───────────────────────────────
+
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["proxy"]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infrastructure/caddy/Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - veyaan-network
+
 networks:
   veyaan-network:
     driver: bridge
 
 volumes:
-  caddy_data:
-  caddy_config:
+  postgres_data:
   nats_data:
   valkey_data:
-  neon_data:
   prometheus_data:
+  caddy_data:
+  caddy_config:

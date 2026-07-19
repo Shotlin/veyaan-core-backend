@@ -22,7 +22,7 @@ class User(Base):
     supabase_user_id = Column(String(255), unique=True, nullable=False, index=True)
     display_name = Column(String(255), nullable=False)
     email = Column(String(255), nullable=False)
-    status = Column(SQLEnum(UserStatus), default=UserStatus.ACTIVE, nullable=False)
+    status = Column(SQLEnum(UserStatus, name="user_status", values_callable=lambda x: [e.value for e in x]), default=UserStatus.ACTIVE, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False

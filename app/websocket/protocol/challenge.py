@@ -28,23 +28,34 @@ def _challenge_key(nonce: str) -> str:
 
 
 async def generate_challenge() -> str:
-    """Generate a 32-byte random hex nonce and store it in Valkey."""
+    """Generate a 32-byte random hex nonce and store metadata in Valkey."""
+    import time
+
     nonce = os.urandom(32).hex()
-    await valkey_client.set(_challenge_key(nonce), "1", ttl=_CHALLENGE_TTL)
+    # Store metadata so we can audit challenge origin; not just a sentinel "1"
+    await valkey_client.set(
+        _challenge_key(nonce),
+        {
+            "created_at": time.time(),
+            "nonce": nonce,
+        },
+        ttl=_CHALLENGE_TTL,
+    )
     return nonce
 
 
 async def consume_challenge(nonce: str) -> bool:
-    """
-    Consume the challenge nonce — returns True if it existed and deletes it.
-    A nonce can only be consumed once (replay protection).
+    """Consume the challenge nonce atomically.
+
+    Uses GETDEL (atomic get-and-delete) so concurrent verifications with the
+    same nonce cannot both succeed (P1-03 fix).
+
+    Returns True if the nonce existed and was successfully consumed.
     """
     key = _challenge_key(nonce)
-    exists = await valkey_client.exists(key)
-    if not exists:
-        return False
-    await valkey_client.delete(key)
-    return True
+    # valkey_client.getdel returns the stored value or None
+    value = await valkey_client.getdel(key)
+    return value is not None
 
 
 def build_challenge_message(

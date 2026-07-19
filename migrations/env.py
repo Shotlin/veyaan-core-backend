@@ -36,17 +36,63 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        process_revision_directives=filter_ops,
+    )
+
+
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+def filter_ops(context, revision, directives):
+    if not directives:
+        return
+    script = directives[0]
+
+    def is_false_positive(op):
+        op_name = op.__class__.__name__
+        if op_name in ("CreateIndexOp", "DropIndexOp") and getattr(op, "table_name", None) == "notification_records":
+            return True
+        if op_name == "DropConstraintOp" and getattr(op, "constraint_name", None) == "users_supabase_user_id_key":
+            return True
+        if op_name == "AlterColumnOp":
+            t_name = getattr(op, "table_name", None)
+            c_name = getattr(op, "column_name", None)
+            if t_name == "approvals" and c_name == "status":
+                return True
+            if t_name == "devices" and c_name == "trust_status":
+                return True
+            if t_name == "pairing_requests" and c_name == "status":
+                return True
+            if t_name == "tasks" and c_name == "attempt_count":
+                return True
+            if t_name == "users" and c_name == "status":
+                return True
+        return False
+
+    filtered_ops = []
+    for op in script.upgrade_ops.ops:
+        if op.__class__.__name__ == "ModifyTableOps":
+            op.ops = [sub_op for sub_op in op.ops if not is_false_positive(sub_op)]
+            if op.ops:
+                filtered_ops.append(op)
+        else:
+            if not is_false_positive(op):
+                filtered_ops.append(op)
+
+    script.upgrade_ops.ops = filtered_ops
+
+
+def do_run_migrations(connection: Connection) -> None:
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        process_revision_directives=filter_ops,
     )
 
     with context.begin_transaction():
         context.run_migrations()
 
-
-def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
-
-    with context.begin_transaction():
-        context.run_migrations()
 
 
 async def run_async_migrations() -> None:

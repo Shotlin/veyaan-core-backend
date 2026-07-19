@@ -78,7 +78,7 @@ app.include_router(commands_router, prefix="/v1")
 app.include_router(emergency_stop_router, prefix="/v1")
 app.include_router(approvals_router, prefix="/v1")
 app.include_router(audit_router, prefix="/v1")
-app.include_router(notifications_router)
+app.include_router(notifications_router, prefix="/v1")
 
 
 @app.get("/")

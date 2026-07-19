@@ -37,9 +37,9 @@ class Approval(Base):
     action_title = Column(String(255), nullable=False)
     action_description = Column(Text, nullable=False)
     status = Column(
-        SQLEnum(ApprovalStatus, create_constraint=False, native_enum=False),
+        String(20),
         nullable=False,
-        default=ApprovalStatus.PENDING,
+        default=ApprovalStatus.PENDING.value,
         index=True,
     )
     decision_nonce_hash = Column(String(64), nullable=False)
